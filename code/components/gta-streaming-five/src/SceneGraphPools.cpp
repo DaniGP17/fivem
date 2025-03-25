@@ -148,13 +148,27 @@ static HookFunction hookFunction([]()
 	hook::put<uint32_t>((char*)computeSceneNodeLocation + 113, pools[eSceneGraphPool::FW_EXTERIOR_SCENE_GRAPH_NODE].poolSize + pools[eSceneGraphPool::FW_STREAMED_SCENE_GRAPH_NODE].poolSize); // 1001
 
 	// Adjust offsets in AssignScratchBuffer function
-	int sceneNodeCount =
+	int firstRoomSceneNodeIndex =
 		pools[eSceneGraphPool::FW_EXTERIOR_SCENE_GRAPH_NODE].poolSize +
 		pools[eSceneGraphPool::FW_STREAMED_SCENE_GRAPH_NODE].poolSize +
-		pools[eSceneGraphPool::FW_INTERIOR_SCENE_GRAPH_NODE].poolSize +
+		pools[eSceneGraphPool::FW_INTERIOR_SCENE_GRAPH_NODE].poolSize;
+	int sceneNodeCount =
+		firstRoomSceneNodeIndex +
 		pools[eSceneGraphPool::FW_ROOM_SCENE_GRAPH_NODE].poolSize +
 		pools[eSceneGraphPool::FW_PORTAL_SCENE_GRAPH_NODE].poolSize;
+	std::initializer_list<int> assignScratchBufferSizes = {
+		160, 177, 194, 211, 228
+	};
+	for(auto& offset : assignScratchBufferSizes)
+	{
+		// Combine two 16 bit values into a single 32 bit DWORD:
+		// - Upper 16 bits (bitSize)
+		// - Lower 16 bits (size)
+		// Result: (bitSize << 16) | size
+		hook::put<uint32_t>((char*)assignScratchBufferLocation + offset, (sceneNodeCount << 16 ) | (sceneNodeCount + 31) >> 5);
+	}
 	hook::put<uint32_t>((char*)assignScratchBufferLocation + 28, sceneNodeCount * 4);
+	hook::put<uint32_t>((char*)assignScratchBufferLocation + 54, sceneNodeCount - firstRoomSceneNodeIndex + 1);
 	hook::put<uint32_t>((char*)clearVisDataLocation + 20, sceneNodeCount * 4);
 
 	// Change pool size of FIRST_ROOM_SCENE_NODE_INDEX
