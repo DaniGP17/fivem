@@ -117,6 +117,7 @@ static HookFunction hookFunction([]()
 	auto computeSceneNodeLocation = hook::get_pattern("4C 8B C1 0F B6 49 ? 85 C9");
 	auto assignScratchBufferLocation = hook::get_pattern("48 89 5C 24 ? 48 89 74 24 ? 48 89 7C 24 ? 48 89 91");
 	auto clearVisDataLocation = hook::get_pattern("40 53 48 83 EC ? 48 8B D9 48 8B 89 ? ? ? ? 33 D2 41 B8");
+	auto clearTraversalDataLocation = hook::get_pattern("48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 0F B7 81 ? ? ? ? 48 8B F9 48 8B 89");
 
 	// Adjust the memory offsets of the allocated pools
 	hook::put<uint32_t>((char*)initPoolsLocation + 88, FW_ENTITY_POOL_SIZE); // 800
@@ -177,6 +178,9 @@ static HookFunction hookFunction([]()
 	hook::put<uint32_t>((char*)assignScratchBufferLocation + 54, STORED_SCREEN_QUAD_COUNT * 16);
 	hook::put<uint32_t>((char*)clearVisDataLocation + 20, MAX_SCENE_NODE_COUNT * 4);
 
+	// Adjust screen quad count
+	hook::put<uint32_t>((char*)clearTraversalDataLocation + 236, STORED_SCREEN_QUAD_COUNT * 16);
+	hook::put<uint32_t>((char*)clearTraversalDataLocation + 269, STORED_SCREEN_QUAD_COUNT * 16);
 
 	// Change pool size of FIRST_ROOM_SCENE_NODE_INDEX
 	std::initializer_list<PatternPair> roomSceneNodeIndexLocations = {
