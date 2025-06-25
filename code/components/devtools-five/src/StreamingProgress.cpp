@@ -66,6 +66,9 @@ struct strRequestInfo
 	uint64_t pad[3];
 };
 
+constexpr uint64_t DOWNLOAD_TIMEOUT_MS = 30000;
+static std::map<std::string, uint64_t> g_downloadStartTimes;
+
 static void StreamingProgress_Update()
 {
 	// process requests
@@ -158,6 +161,7 @@ static void StreamingProgress_Update()
 							if (g_downloadList.find(nameBuffer) == g_downloadList.end())
 							{
 								g_downloadList.insert({ nameBuffer, resDevice->GetLength(fileName) });
+								g_downloadStartTimes[nameBuffer] = timeGetTime();
 							}
 
 							foundNow.insert(nameBuffer);
@@ -170,25 +174,43 @@ static void StreamingProgress_Update()
 		}
 	}
 
-	// remove any entries that are no longer requested
-	for (auto it = g_downloadList.begin(); it != g_downloadList.end(); )
 	{
-		// skip if it's actually done
-		if (g_downloadDone.find(it->first) != g_downloadDone.end())
-		{
-			it++;
-			continue;
-		}
+		std::unique_lock<std::shared_mutex> lock(g_mutex);
 
-		// if not found this frame, remove it
-		if (foundNow.find(it->first) == foundNow.end())
+		// remove any entries that are no longer requested
+		for (auto it = g_downloadList.begin(); it != g_downloadList.end(); )
 		{
-			std::unique_lock<std::shared_mutex> lock(g_mutex);
-			it = g_downloadList.erase(it);
-		}
-		else
-		{
-			it++;
+			// skip if it's actually done
+			if (g_downloadDone.find(it->first) != g_downloadDone.end())
+			{
+				it++;
+				continue;
+			}
+
+			bool shouldRemove = false;
+
+			if (foundNow.find(it->first) == foundNow.end())
+			{
+				shouldRemove = true;
+			}
+			else if (auto startIt = g_downloadStartTimes.find(it->first); 
+					startIt != g_downloadStartTimes.end()) 
+			{
+				uint64_t now = timeGetTime();
+				if ((now - startIt->second) > DOWNLOAD_TIMEOUT_MS) {
+					shouldRemove = true;
+					console::PrintError("Asset download timed out: %s", it->first.c_str());
+					
+					g_downloadProgress.erase(it->first);
+				}
+			}
+
+			if (shouldRemove) {
+				g_downloadStartTimes.erase(it->first);
+				it = g_downloadList.erase(it);
+			} else {
+				it++;
+			}
 		}
 	}
 
@@ -218,8 +240,12 @@ static void StreamingProgress_Update()
 	{
 		DeactivateStatusText(3);
 
-		g_downloadList.clear();
-		g_downloadDone.clear();
+		{
+			std::unique_lock<std::shared_mutex> lock(g_mutex);
+			g_downloadList.clear();
+			g_downloadStartTimes.clear();
+			g_downloadDone.clear();
+		}
 	}
 }
 
