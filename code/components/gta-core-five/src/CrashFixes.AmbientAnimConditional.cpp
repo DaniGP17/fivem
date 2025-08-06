@@ -89,4 +89,6 @@ static HookFunction hookFunction([]
 		g_CTaskAmbientClipsCtor = (decltype(g_CTaskAmbientClipsCtor))hook::get_call(createCloneFsmAlloc + 58);
 		hook::call(createCloneFsmAlloc + 58, &CTaskAmbientClipsCtor);
 	}
+
+	auto aaaaa123 = hook::get_pattern<uint8_t>("48 8B 0D ? ? ? ? BA ? ? ? ? 41 B8 ? ? ? ? E8 ? ? ? ? 48 8B C8 48 85 C0 75 ? B9 ? ? ? ? E8 ? ? ? ? EB ? 8A 45 ? 44 8B 4D ? 8B 55");
 });
