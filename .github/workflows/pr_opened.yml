@@ -214,7 +214,12 @@ jobs:
     permissions:
       packages: read
     needs: input_validation
-    if: ${{ needs.input_validation.outputs.requires_compilation == 'true' }}
+    if: >
+      ${{
+        needs.input_validation.outputs.requires_compilation == 'true' &&
+        needs.input_validation.outputs.patterns != '' &&
+        needs.input_validation.outputs.game != 'none'
+      }}
     uses: ./.github/workflows/ci_pattern.yml
     with:
       patterns: ${{ needs.input_validation.outputs.patterns }}
