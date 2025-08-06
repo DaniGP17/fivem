@@ -11,9 +11,7 @@ on:
         description: "Pattern list to validate (splitted by commas)"
         required: true
         type: string
-        default: |
-          83 CE ? 44 8B C6 44 8A CD
-          4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D
+        default: 83 CE ? 44 8B C6 44 8A CD,4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D
   workflow_call:
     inputs:
       patterns:
@@ -58,8 +56,9 @@ jobs:
 
       - name: Run PatternV
         run: |
-          IFS=$'\n' read -rd '' -a PATTERN_LIST <<< "${{ inputs.patterns }}"
-          for pattern in "${PATTERN_LIST[@]}"; do
+          PATTERNS_RAW="${{ inputs.patterns }}"
+          PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
+          while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
             ./PatternV/build/PatternV Release/Builds "$pattern"
-          done
+          done <<< "$PATTERNS_CLEAN"
