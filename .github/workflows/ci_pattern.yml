@@ -97,7 +97,7 @@ jobs:
 
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time 2>&1 | \
+            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | \
               tr '\r' '\n' | \
               sed -E 's/^\[\+\]/- [x]/; s/^\[-\]/- [ ]/') || FAIL=2
             OUTPUT="$OUTPUT\n#### Pattern: $pattern\n\n$RESULT\n"
