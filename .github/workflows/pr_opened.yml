@@ -180,7 +180,8 @@ jobs:
           patterns=$(curl -ks "$FILES_URL" \
             | jq -r '.[] | .patch' \
             | grep '^+' \
-            | grep -Eo '([0-9A-Fa-f\?]{2})( [0-9A-Fa-f\?]{2})+' \
+            | grep -Eo '"[0-9A-Fa-f\? ]+"' \
+            | tr -d '"' \
             | sort -u)
 
           echo "Detected patterns:"
