@@ -113,20 +113,18 @@ jobs:
             OUTPUT="$OUTPUT\n### Pattern: \`$pattern\`\n\`\`\`\n$RESULT\n\`\`\`"
           done <<< "$PATTERNS_CLEAN"
 
-          echo "output<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
+          echo "output_b64=$ENCODED" >> $GITHUB_OUTPUT
       
       - name: Comment results on PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const output = `${{ steps.run_patternv.outputs.output }}`;
-            const prNumber = context.issue.number;
+            const decoded = Buffer.from(`${{ steps.run_patternv.outputs.output_b64 }}`, 'base64').toString();
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumber,
-              body: `## PatternV Results\n${output}`
+              issue_number: context.issue.number,
+              body: `## 🔍 PatternV Results\n${decoded}`
             });
