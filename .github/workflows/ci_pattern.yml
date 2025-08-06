@@ -1,0 +1,31 @@
+name: CI Pattern Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_pattern_check:
+        description: "Run only the pattern check"
+        required: true
+        default: "true"
+  workflow_call:
+
+permissions:
+  packages: read
+
+jobs:
+  pattern_check:
+    name: Pre-build Pattern Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: action/checkout@v4
+
+      - name: Clone PatternV
+        run git clone --depth 1 https://github.com/DaniGP17/PatternV.git
+
+      -name: Build PatternV
+        run |
+          cd PatternV
+          mkdir build && cd build
+          cmake ..
+          make -j$(nproc)
