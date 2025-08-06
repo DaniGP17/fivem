@@ -7,7 +7,16 @@ on:
         description: "Run only the pattern check"
         required: true
         default: "true"
+      patterns:
+        description: "Pattern list to validate (splitted by commas)"
+        required: true
+        type: string
   workflow_call:
+    inputs:
+      patterns:
+        description: "Pattern list to validate (splitted by commas)"
+        required: true
+        type: string
 
 permissions:
   packages: read
@@ -46,4 +55,8 @@ jobs:
 
       - name: Run PatternV
         run: |
-          ./PatternV/build/PatternV Release/Builds "4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D"
+          IFS=$'\n' read -rd '' -a PATTERN_LIST <<< "${{ inputs.patterns }}"
+          for pattern in "${PATTERN_LIST[@]}"; do
+            echo "Searching pattern: $pattern"
+            ./PatternV/build/PatternV Release/Builds "$pattern"
+          done
