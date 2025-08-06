@@ -214,6 +214,7 @@ jobs:
     if: >
       ${{
         needs.input_validation.outputs.requires_compilation == 'true' &&
+        needs.input_validation.outputs.patterns &&
         needs.input_validation.outputs.patterns != '' &&
         needs.input_validation.outputs.game != 'none'
       }}
