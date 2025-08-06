@@ -109,7 +109,7 @@ jobs:
 
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" 2>&1) || FAIL=2
+            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color 2>&1) || FAIL=2
             OUTPUT="$OUTPUT\n### Pattern: \`$pattern\`\n\`\`\`\n$RESULT\n\`\`\`"
           done <<< "$PATTERNS_CLEAN"
 
@@ -126,5 +126,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## 🔍 PatternV Results\n${decoded}`
+              body: `## PatternV Results\n${decoded}`
             });
