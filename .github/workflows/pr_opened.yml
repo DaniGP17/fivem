@@ -181,7 +181,6 @@ jobs:
 
           if [[ -z "$patterns" ]]; then
             echo "No patterns found. Skipping."
-            echo "patterns=" >> "$GITHUB_OUTPUT"
             echo "game=none" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -214,7 +213,6 @@ jobs:
     if: >
       ${{
         needs.input_validation.outputs.requires_compilation == 'true' &&
-        needs.input_validation.outputs.patterns &&
         needs.input_validation.outputs.patterns != '' &&
         needs.input_validation.outputs.game != 'none'
       }}
