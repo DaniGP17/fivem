@@ -102,6 +102,7 @@ jobs:
           done
 
       - name: Run PatternV
+        id: run_patternv
         run: |
           PATTERNS_RAW="${{ inputs.patterns }}"
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
