@@ -23,6 +23,7 @@ jobs:
       PR_DESCR: ${{ github.event.pull_request.body }}
     outputs:
       requires_compilation: ${{ steps.check_changed_files.outputs.requires_compilation }}
+      patterns: ${{ steps.extract_patterns.outputs.patterns }}
     steps:
       - name: Check PR's changed files
         id: check_changed_files
@@ -173,6 +174,20 @@ jobs:
                 labels: addLabels
               });
             }
+      - name: Extract new patterns from PR
+        id: extract_patterns
+        run: |
+          patterns=$(curl -ks "$FILES_URL" \
+            | jq -r '.[] | .patch' \
+            | grep '^+' \
+            | grep -Eo '([0-9A-Fa-f\?]{2})( [0-9A-Fa-f\?]{2})+' \
+            | sort -u)
+
+          echo "Detected patterns:"
+          echo "$patterns"
+
+          patterns_csv=$(echo "$patterns" | paste -sd "," -)
+          echo "patterns=$patterns_csv" >> "$GITHUB_OUTPUT"
   
   pattern_check:
     name: Pattern Check
@@ -181,6 +196,8 @@ jobs:
     needs: input_validation
     if: ${{ needs.input_validation.outputs.requires_compilation == 'true' }}
     uses: ./.github/workflows/ci_pattern.yml
+    with:
+      patterns: ${{ needs.input_validation.outputs.patterns }}
 
   build_all:
     name: Build
