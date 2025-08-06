@@ -48,7 +48,7 @@ jobs:
           cmake ..
           make -j$(nproc)
 
-            - name: Download .text files
+      - name: Download .text files
         run: |
           BASE_URL="https://raw.githubusercontent.com/DaniGP17/fivem/feat/ci-pattern-check/builds"
 
