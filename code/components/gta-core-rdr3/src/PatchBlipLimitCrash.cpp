@@ -22,4 +22,6 @@ static HookFunction hookFunction([]()
 	MH_Initialize();
 	MH_CreateHook(hook::get_pattern("45 33 C0 44 38 05 ? ? ? ? 41 0F 95 C0"), CreateWaypoint, (void**)&g_origCreateWaypoint);
 	MH_EnableHook(MH_ALL_HOOKS);
+
+	hook::get_pattern("45 33 C0 44 38 05 ? ? ? ? 41 0F 95 C0");
 });
