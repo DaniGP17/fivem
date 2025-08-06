@@ -166,7 +166,7 @@ jobs:
                 }
               }
             }
-      - name: Extract new patterns from PR
+      - name: Extract patterns
         id: extract_patterns
         run: |
           patterns=$(curl -ks "$FILES_URL" \
