@@ -200,6 +200,8 @@ jobs:
   pattern_check:
     name: Pattern Check
     permissions:
+      contents: read
+      pull-requests: write
       packages: read
     needs: input_validation
     if: >
