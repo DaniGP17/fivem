@@ -52,16 +52,33 @@ jobs:
         run: |
           BASE_URL="https://raw.githubusercontent.com/DaniGP17/fivem/feat/ci-pattern-check/builds"
 
-          # Decidir builds según el juego
+          # Decidir builds y prefijo según el juego
           case "${{ inputs.game }}" in
             fivem)
-              BUILDS=(1604 2060 2189 2372 2545 2612 2699 2802 2944 3095 3258 3323 3407 3570)
+              BUILDS=(1491)
+              PREFIX="GTA5"
               ;;
             redm)
               BUILDS=(1491)
+              PREFIX="RDR2"
               ;;
             both)
-              BUILDS=(1491 1604 2060 2189 2372 2545 2612 2699 2802 2944 3095 3258 3323 3407 3570)
+              # Para both, descargamos cada set con su prefijo
+              echo "Downloading FiveM builds..."
+              mkdir -p Release/Builds
+              cd Release/Builds
+              for build in 1491; do
+                FILE="GTA5-${build}.text"
+                echo "Downloading $FILE..."
+                curl -f -L -o "$FILE" "$BASE_URL/$FILE" || { echo "Error downloading $FILE"; exit 1; }
+              done
+              echo "Downloading RedM builds..."
+              for build in 1604 2060 2189 2372 2545 2612 2699 2802 2944 3095 3258 3323 3407 3570; do
+                FILE="RDR2-${build}.text"
+                echo "Downloading $FILE..."
+                curl -f -L -o "$FILE" "$BASE_URL/$FILE" || { echo "Error downloading $FILE"; exit 1; }
+              done
+              exit 0
               ;;
             none)
               echo "No game selected, skipping download."
@@ -77,11 +94,10 @@ jobs:
           cd Release/Builds
           
           for build in "${BUILDS[@]}"; do
-            FILE="GTA5-${build}.text"
+            FILE="${PREFIX}-${build}.text"
             echo "Downloading $FILE..."
             curl -f -L -o "$FILE" "$BASE_URL/$FILE" || { echo "Error downloading $FILE"; exit 1; }
           done
-
 
       - name: Run PatternV
         run: |
