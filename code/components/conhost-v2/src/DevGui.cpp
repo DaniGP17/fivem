@@ -178,6 +178,26 @@ static void DevGui_Draw(const DevGuiNode* node)
 				return;
 			}
 
+			inline DevGuiNode* RegisterMenu(const std::string& name)
+			{
+				for (auto& child : children)
+				{
+					if (child->name == name)
+					{
+						return child.get();
+					}
+				}
+		
+				auto child = std::make_unique<DevGuiNode>();
+				child->name = name;
+				child->type = DevGuiNode_Menu;
+		
+				auto childPtr = child.get();
+				children.push_back(std::move(child));
+		
+				return childPtr;
+			}
+
 			auto intEntry = std::dynamic_pointer_cast<internal::ConsoleVariableEntry<int>>(entry);
 
 			if (intEntry)
@@ -234,6 +254,8 @@ static InitFunction initFunction([]()
 	{
 		auto node = DevGui_InstantiatePath(path);
 
+		auto intEntry = std::dynamic_pointer_cast<internal::ConsoleVariableEntry<int>>(entry);
+		
 		node->type = DevGuiNode::DevGuiNode_Command;
 		node->commandOrConVar = commandString;
 	});
