@@ -179,6 +179,13 @@ jobs:
           echo "Detected patterns:"
           echo "$patterns"
 
+          if [[ -z "$patterns" ]]; then
+            echo "No patterns found. Skipping."
+            echo "patterns=" >> "$GITHUB_OUTPUT"
+            echo "game=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           patterns_csv=$(echo "$patterns" | paste -sd "," -)
           echo "patterns=$patterns_csv" >> "$GITHUB_OUTPUT"
 
