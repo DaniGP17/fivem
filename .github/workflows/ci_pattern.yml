@@ -62,7 +62,7 @@ jobs:
 
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            ./PatternV/build/PatternV Release/Builds "$pattern" || FAIL=2
+            timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" || FAIL=2
           done <<< "$PATTERNS_CLEAN"
 
           exit $FAIL
