@@ -167,14 +167,14 @@ jobs:
               }
             }
             
-            if (addLabels.length > 0)
-            {
-              // triage label
-              github.rest.issues.addLabels({
-                ...issue,
-                labels: addLabels
-              });
-            }
+            # if (addLabels.length > 0)
+            # {
+            #   // triage label
+            #   github.rest.issues.addLabels({
+            #     ...issue,
+            #     labels: addLabels
+            #   });
+            # }
       - name: Extract new patterns from PR
         id: extract_patterns
         run: |
