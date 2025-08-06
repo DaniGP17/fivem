@@ -18,13 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: action/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Clone PatternV
-        run git clone --depth 1 https://github.com/DaniGP17/PatternV.git
+        run: git clone --depth 1 https://github.com/DaniGP17/PatternV.git
 
-      -name: Build PatternV
-        run |
+      - name: Build PatternV
+        run: |
           cd PatternV
           mkdir build && cd build
           cmake ..
