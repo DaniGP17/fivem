@@ -182,7 +182,7 @@ jobs:
           patterns_csv=$(echo "$patterns" | paste -sd "," -)
           echo "patterns=$patterns_csv" >> "$GITHUB_OUTPUT"
 
-          issueBody="${PR_DESCR}"
+          issueBody="${PR_DESCR:-}"
 
           game="none"
 
