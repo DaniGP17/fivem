@@ -34,6 +34,7 @@ jobs:
         run: |
           BASE_URL="https://raw.githubusercontent.com/DaniGP17/fivem/feat/ci-pattern-check/builds"
           BUILDS=("1604" "2060" "2189" "2372" "2545" "2612" "2699" "2802" "2944" "3095" "3258" "3323" "3407" "3570")
+          
           mkdir -p Release/Builds
           cd Release/Builds
           
@@ -42,8 +43,6 @@ jobs:
             echo "Descargando $FILE..."
             curl -L -o "$FILE" "$BASE_URL/$FILE"
           done
-
-          cd ..
         
         - name: Run PatternV
           run: |
