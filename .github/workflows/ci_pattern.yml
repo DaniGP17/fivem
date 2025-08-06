@@ -29,6 +29,8 @@ on:
 
 permissions:
   packages: read
+  contents: read
+  pull-requests: write
 
 jobs:
   pattern_check:
