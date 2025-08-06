@@ -58,7 +58,11 @@ jobs:
         run: |
           PATTERNS_RAW="${{ inputs.patterns }}"
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
+          FAIL=0
+
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            ./PatternV/build/PatternV Release/Builds "$pattern"
+            ./PatternV/build/PatternV Release/Builds "$pattern" || FAIL=2
           done <<< "$PATTERNS_CLEAN"
+
+          exit $FAIL
