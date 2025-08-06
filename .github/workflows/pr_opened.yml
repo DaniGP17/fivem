@@ -24,7 +24,7 @@ jobs:
     outputs:
       requires_compilation: ${{ steps.check_changed_files.outputs.requires_compilation }}
       patterns: ${{ steps.extract_patterns.outputs.patterns }}
-      game: ${{ steps.detect_game.outputs.game }}
+      game: ${{ steps.extract_patterns.outputs.game }}
     steps:
       - name: Check PR's changed files
         id: check_changed_files
