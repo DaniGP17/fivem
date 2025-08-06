@@ -11,6 +11,9 @@ on:
         description: "Pattern list to validate (splitted by commas)"
         required: true
         type: string
+        default: |
+          83 CE ? 44 8B C6 44 8A CD
+          4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D
   workflow_call:
     inputs:
       patterns:
