@@ -44,6 +44,6 @@ jobs:
             curl -L -o "$FILE" "$BASE_URL/$FILE"
           done
 
-        - name: Run PatternV
-          run: |
-            ./PatternV/build/PatternV Release/Builds "4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D"
+      - name: Run PatternV
+        run: |
+          ./PatternV/build/PatternV Release/Builds "4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D"
