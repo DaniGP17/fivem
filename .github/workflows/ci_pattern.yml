@@ -22,9 +22,6 @@ jobs:
     name: Pre-build Pattern Check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Clone PatternV
         run: git clone --depth 1 https://github.com/DaniGP17/PatternV.git
 
@@ -37,7 +34,7 @@ jobs:
       - name: Build PatternV
         run: |
           cd PatternV
-          mkdir build && cd build
+          mkdir -p build && cd build
           cmake ..
           make -j$(nproc)
 
