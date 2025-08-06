@@ -24,6 +24,7 @@ jobs:
     outputs:
       requires_compilation: ${{ steps.check_changed_files.outputs.requires_compilation }}
       patterns: ${{ steps.extract_patterns.outputs.patterns }}
+      game: ${{ steps.detect_game.outputs.game }}
     steps:
       - name: Check PR's changed files
         id: check_changed_files
@@ -189,6 +190,24 @@ jobs:
 
           patterns_csv=$(echo "$patterns" | paste -sd "," -)
           echo "patterns=$patterns_csv" >> "$GITHUB_OUTPUT"
+      - name: Detect game type
+        id: detect_game
+        run: |
+          issueBody="${PR_DESCR}"
+
+          game="none"
+
+          if echo "$issueBody" | grep -iq "FiveM" && echo "$issueBody" | grep -iq "RedM"; then
+            game="both"
+          elif echo "$issueBody" | grep -iq "FiveM"; then
+            game="fivem"
+          elif echo "$issueBody" | grep -iq "RedM"; then
+            game="redm"
+          fi
+
+          echo "Detected game: $game"
+          echo "game=$game" >> "$GITHUB_OUTPUT"
+
   
   pattern_check:
     name: Pattern Check
@@ -199,6 +218,7 @@ jobs:
     uses: ./.github/workflows/ci_pattern.yml
     with:
       patterns: ${{ needs.input_validation.outputs.patterns }}
+      game: ${{ needs.input_validation.outputs.game }}
 
   build_all:
     name: Build
