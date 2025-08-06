@@ -97,8 +97,11 @@ jobs:
 
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color 2>&1 | sed 's/\(\[\+[^\[]*\)/\n\1/g' | sed -e 's/^\[\+\]/- [x]/' -e 's/^\[-\]/- [ ]/') || FAIL=2
-            OUTPUT="$OUTPUT\n#### Pattern: \$pattern\\n\n$RESULT\n"
+            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color 2>&1 | \
+              sed 's/\(\[\+\|\[-\)\([^]]*\]\)/\n\1\2/g' | \
+              sed -E 's/^\[\+\]/- [x]/; s/^\[-\]/- [ ]/') || FAIL=2
+            OUTPUT="$OUTPUT\n#### Pattern: $pattern\n\n$RESULT\n"
+
           done <<< "$PATTERNS_CLEAN"
 
           ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
