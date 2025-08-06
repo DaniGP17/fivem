@@ -170,11 +170,10 @@ jobs:
         id: extract_patterns
         run: |
           patterns=$(curl -ks "$FILES_URL" \
-          | jq -r '.[].patch' \
+          | jq -r '.[] | .patch' \
           | grep '^+' \
-          | grep -vE '^\+\+\+' \
-          | grep -oP 'get_pattern<[^>]+>\("[^"]+"\)' \
-          | sed -E 's/.*get_pattern<[^>]+>\("([^"]+)"\).*/\1/' \
+          | grep -oP '"(?:[0-9A-Fa-f]{2}|\?)(?:\s+(?:[0-9A-Fa-f]{2}|\?)){2,}"' \
+          | sed -E 's/^"//; s/"$//' \
           | sort -u)
 
           echo "Detected patterns:"
