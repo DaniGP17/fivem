@@ -29,7 +29,7 @@ jobs:
           mkdir build && cd build
           cmake ..
           make -j$(nproc)
-        
+
       - name: Download .text files
         run: |
           BASE_URL="https://raw.githubusercontent.com/DaniGP17/fivem/feat/ci-pattern-check/builds"
@@ -43,7 +43,7 @@ jobs:
             echo "Descargando $FILE..."
             curl -L -o "$FILE" "$BASE_URL/$FILE"
           done
-        
+
         - name: Run PatternV
           run: |
             ./PatternV/build/PatternV Release/Builds "4C 8D 9C 24 ? ? ? ? 49 8B 5B ? 49 8B 73 ? 41 0F 28 73 ? 41 0F 28 7B ? 45 0F 28 43 ? 49 8B E3 41 5E 41 5D"
