@@ -94,19 +94,25 @@ jobs:
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
           OUTPUT=""
           FAIL=0
+          PATTERN_COUNT=0
 
-          while IFS= read -r pattern; do
+          mapfile -t PATTERN_LIST <<< "$PATTERNS_CLEAN"
+          PATTERN_COUNT=${#PATTERN_LIST[@]}
+
+          for pattern in "${PATTERN_LIST[@]}"; do
             echo "Searching pattern: $pattern"
             RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | tr '\r' '\n') || FAIL=2
             
             GTA5_MATCHES=""
             RDR2_MATCHES=""
+            FOUND_MISSING=false
 
             while IFS= read -r line; do
               if [[ "$line" =~ GTA5_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
+                  FOUND_MISSING=true
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
@@ -119,6 +125,7 @@ jobs:
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
+                  FOUND_MISSING=true
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
@@ -130,22 +137,24 @@ jobs:
               fi
             done <<< "$RESULT"
 
-            SECTION="Pattern: \`$pattern\`"
-            if [[ -n "$GTA5_MATCHES" ]]; then
-              SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
+            if [[ $PATTERN_COUNT -le 3 || "$FOUND_MISSING" == true ]]; then
+              SECTION="Pattern: \`$pattern\`"
+              if [[ -n "$GTA5_MATCHES" ]]; then
+                SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
+              fi
+              if [[ -n "$RDR2_MATCHES" ]]; then
+                SECTION="$SECTION\n\nMatches 🐎:$RDR2_MATCHES"
+              fi
+              OUTPUT="$OUTPUT\n\n$SECTION\n\n---"
             fi
-            if [[ -n "$RDR2_MATCHES" ]]; then
-              SECTION="$SECTION\n\nMatches 🐎:$RDR2_MATCHES"
-            fi
-            OUTPUT="$OUTPUT\n\n$SECTION\n\n---"
+          done
 
-          done <<< "$PATTERNS_CLEAN"
-
-          # Remove final "---" if needed
+          # Remove trailing ---
           OUTPUT=$(echo -e "$OUTPUT" | sed '$d')
-          
+
           ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
           echo "output_b64=$ENCODED" >> $GITHUB_OUTPUT
+
       
       - name: Comment results on PR
         uses: actions/github-script@v7
