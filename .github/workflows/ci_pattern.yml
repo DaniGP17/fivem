@@ -121,7 +121,7 @@ jobs:
             fi
           done <<< "$PATTERNS_CLEAN"
 
-          mapfile -t PATTERN_LIST <<< "$FILTERED_PATTERNS"
+          mapfile -t PATTERN_LIST < <(echo "$FILTERED_PATTERNS" | sed '/^\s*$/d')
           PATTERN_COUNT=${#PATTERN_LIST[@]}
 
           if [[ "$PATTERN_COUNT" -eq 0 ]]; then
