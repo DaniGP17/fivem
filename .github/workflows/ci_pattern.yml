@@ -109,7 +109,7 @@ jobs:
             NORMALIZED=$(echo "$pattern" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
             SKIP="false"
             for already in $ALREADY_ARRAY; do
-              NORMALIZED_ALREADY=$(echo "$already" | sed 's/  */ /g')
+              NORMALIZED_ALREADY=$(echo "$already" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
               echo "Comparing '$NORMALIZED' with '$NORMALIZED_ALREADY'"
               if [[ "$NORMALIZED" == "$NORMALIZED_ALREADY" ]]; then
                 SKIP="true"
