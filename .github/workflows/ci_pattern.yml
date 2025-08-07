@@ -100,7 +100,7 @@ jobs:
         run: |
           PATTERNS_RAW="${{ inputs.patterns }}"
           ALREADY_COMMENTED="${{ steps.get_previous_patterns.outputs.result }}"
-          ALREADY_ARRAY=$(echo "$ALREADY_COMMENTED" | tr ',' '\n')
+          IFS=',' read -ra ALREADY_ARRAY <<< "$ALREADY_COMMENTED"
 
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
 
