@@ -101,10 +101,12 @@ jobs:
 
           FILTERED_PATTERNS=""
           while IFS= read -r pattern; do
-            NORMALIZED=$(echo "$pattern" | tr '[:upper:]' '[:lower:]' | xargs)
+            NORMALIZED=$(echo "$pattern" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
             SKIP="false"
             for already in $ALREADY_ARRAY; do
-              if [[ "$NORMALIZED" == "$already" ]]; then
+              NORMALIZED_ALREADY=$(echo "$already" | sed 's/  */ /g')
+              echo "Comparing '$NORMALIZED' with '$NORMALIZED_ALREADY'"
+              if [[ "$NORMALIZED" == "$NORMALIZED_ALREADY" ]]; then
                 SKIP="true"
                 break
               fi
