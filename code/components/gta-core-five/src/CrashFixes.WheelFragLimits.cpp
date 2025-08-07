@@ -55,4 +55,10 @@ static HookFunction hookFunction([]()
 		fragParenOffset = 0x3E0;
 		unkFlagOffset = 760;
 	}
+
+	orig_CPlayerAppearanceDataNode_Serialise = hook::trampoline(hook::get_pattern("40 55 53 56 57 41 54 41 55 41 56 41 57 48 8B EC 48 83 EC ? 48 8B FA 48 8D 91 ? ? ? ? 48 8B F1 48 8B CF"), CPlayerAppearanceDataNode_Serialise);
+	offset_NewModelHash = *hook::get_pattern<int32_t>("48 8D 91 ? ? ? ? 48 8B F1 48 8B CF 45 33 C0 E8 ? ? ? ? 48 8B 07", 3);
+	offset_HasHeadBlendData = *hook::get_pattern<int32_t>("48 8D 9E ? ? ? ? 48 8B D3 45 33 C0 48 8B CF FF 50 ? 44 38 2B 75 ? 48 8B 07 48 8B CF FF 90 ? ? ? ? 84 C0 74", 3);
+
+	hook::get_pattern("48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 48 89 78 ? 41 56 48 83 EC ? 45 33 F6 40 8A EA 48 8B D9 48 85 C9");
 });
