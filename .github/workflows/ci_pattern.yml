@@ -104,40 +104,34 @@ jobs:
 
             GTA5_MATCHES=""
             RDR2_MATCHES=""
-            FOUND_MISSING="false"
+            HAS_MISSING="false"
 
-            exec 3<<< "$RESULT"
-            while IFS= read -r line <&3; do
+            while IFS= read -r line; do
               if [[ "$line" =~ GTA5_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
-                  FOUND_MISSING="true"
-                else
+                  HAS_MISSING="true"
+                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
-                  for addr in "${ADDR_LIST[@]}"; do
-                    GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${addr^^}"
-                    break
-                  done
+                  GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
                 fi
               elif [[ "$line" =~ RDR2_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
-                  FOUND_MISSING="true"
-                else
+                  HAS_MISSING="true"
+                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
-                  for addr in "${ADDR_LIST[@]}"; do
-                    RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${addr^^}"
-                    break
-                  done
+                  RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
                 fi
               fi
-            done
+            done < <(echo "$RESULT")
 
-            if [[ "$PATTERN_COUNT" -le 3 || "$FOUND_MISSING" == "true" ]]; then
+            # Solo mostrar si hay menos de 4 patrones o hay algún ❌
+            if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" ]]; then
               SECTION="Pattern: \`$pattern\`"
               if [[ -n "$GTA5_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
@@ -154,6 +148,7 @@ jobs:
 
           ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
           echo "output_b64=$ENCODED" >> $GITHUB_OUTPUT
+
 
       
       - name: Comment results on PR
