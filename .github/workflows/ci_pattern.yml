@@ -11,6 +11,9 @@ on:
         description: "Game (fivem, redm, both, none)"
         required: true
         type: string
+    secrets:
+      CFX_GAME_BUILDS_PASSWORD:
+        required: true
 
 permissions:
   packages: read
