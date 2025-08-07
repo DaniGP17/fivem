@@ -57,12 +57,8 @@ jobs:
           echo "Calculating SHA256 of downloaded archive..."
           sha256sum "$ARCHIVE_NAME"
 
-          echo "Password is present? $([[ -n "$ARCHIVE_PASSWORD" ]] && echo yes || echo no)"
-
           echo "Extracting $ARCHIVE_NAME..."
           7z x "$ARCHIVE_NAME" -p$ARCHIVE_PASSWORD -y || { echo "Failed to extract archive"; exit 1; }
-
-          echo "Done."
 
       - name: Get already commented patterns
         id: get_previous_patterns
@@ -110,7 +106,6 @@ jobs:
             SKIP="false"
             for already in "${ALREADY_ARRAY[@]}"; do
               NORMALIZED_ALREADY=$(echo "$already" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
-              echo "Comparing '$NORMALIZED' with '$NORMALIZED_ALREADY'"
               if [[ "$NORMALIZED" == "$NORMALIZED_ALREADY" ]]; then
                 SKIP="true"
                 break
