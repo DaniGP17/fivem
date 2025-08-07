@@ -50,7 +50,7 @@ jobs:
           curl -sSfL --retry 3 -o "$ARCHIVE_NAME" "$BASE_URL/$ARCHIVE_NAME" || { echo "Error downloading $ARCHIVE_NAME"; exit 1; }
 
           echo "Extracting $ARCHIVE_NAME..."
-          7z x "$ARCHIVE_NAME" -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
+          7z x "$ARCHIVE_NAME" -p"${{ secrets.CFX_GAME_BUILDS_PASSWORD }}" -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
 
           echo "Done."
 
