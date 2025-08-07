@@ -49,6 +49,9 @@ jobs:
           echo "Downloading $ARCHIVE_NAME..."
           curl -sSfL --retry 3 -o "$ARCHIVE_NAME" "$BASE_URL/$ARCHIVE_NAME" || { echo "Error downloading $ARCHIVE_NAME"; exit 1; }
 
+          echo "Calculating SHA256 of downloaded archive..."
+          sha256sum "$ARCHIVE_NAME"
+
           echo "Extracting $ARCHIVE_NAME..."
           7z x "$ARCHIVE_NAME" -p"${{ secrets.CFX_GAME_BUILDS_PASSWORD }}" -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
 
