@@ -94,7 +94,6 @@ jobs:
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
           OUTPUT=""
           FAIL=0
-          PATTERN_COUNT=0
 
           mapfile -t PATTERN_LIST <<< "$PATTERNS_CLEAN"
           PATTERN_COUNT=${#PATTERN_LIST[@]}
@@ -102,17 +101,18 @@ jobs:
           for pattern in "${PATTERN_LIST[@]}"; do
             echo "Searching pattern: $pattern"
             RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | tr '\r' '\n') || FAIL=2
-            
+
             GTA5_MATCHES=""
             RDR2_MATCHES=""
-            FOUND_MISSING=false
+            FOUND_MISSING="false"
 
-            while IFS= read -r line; do
+            exec 3<<< "$RESULT"
+            while IFS= read -r line <&3; do
               if [[ "$line" =~ GTA5_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
-                  FOUND_MISSING=true
+                  FOUND_MISSING="true"
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
@@ -125,7 +125,7 @@ jobs:
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
-                  FOUND_MISSING=true
+                  FOUND_MISSING="true"
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
@@ -135,9 +135,9 @@ jobs:
                   done
                 fi
               fi
-            done <<< "$RESULT"
+            done
 
-            if [[ $PATTERN_COUNT -le 3 || "$FOUND_MISSING" == true ]]; then
+            if [[ "$PATTERN_COUNT" -le 3 || "$FOUND_MISSING" == "true" ]]; then
               SECTION="Pattern: \`$pattern\`"
               if [[ -n "$GTA5_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
