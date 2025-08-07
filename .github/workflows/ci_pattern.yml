@@ -137,7 +137,7 @@ jobs:
             if [[ -n "$RDR2_MATCHES" ]]; then
               SECTION="$SECTION\n Matches 🐎:$RDR2_MATCHES"
             fi
-            OUTPUT="$OUTPUT\n\`\`\`\n$SECTION\n\`\`\`\n"
+            OUTPUT="$OUTPUT\n\n$SECTION\n\n"
 
           done <<< "$PATTERNS_CLEAN"
 
