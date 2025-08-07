@@ -159,6 +159,8 @@ static void DoLoadLevel(int index)
 		}
 	}
 
+	// Testing :)
+
 	// mark the level as being custom
 	g_wasLastLevelCustom = (g_overrideNextLoadedLevel != "gta5" && g_overrideNextLoadedLevel.find("/gta5") == std::string::npos);
 
@@ -523,3 +525,4 @@ static InitFunction initFunction([] ()
 		g_gameUnloaded = true;
 	}, INT32_MAX);
 });
+
