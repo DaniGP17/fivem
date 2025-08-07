@@ -220,6 +220,8 @@ jobs:
     with:
       patterns: ${{ needs.input_validation.outputs.patterns }}
       game: ${{ needs.input_validation.outputs.game }}
+    secrets:
+      CFX_GAME_BUILDS_PASSWORD: ${{ secrets.CFX_GAME_BUILDS_PASSWORD }}
 
   build_all:
     name: Build
