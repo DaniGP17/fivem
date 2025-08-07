@@ -118,11 +118,10 @@ jobs:
           fi
 
           GAME="${{ inputs.game }}"
-          PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
           OUTPUT=""
           FAIL=0
 
-          mapfile -t PATTERN_LIST <<< "$PATTERNS_CLEAN"
+          mapfile -t PATTERN_LIST <<< "$FILTERED_PATTERNS"
           PATTERN_COUNT=${#PATTERN_LIST[@]}
 
           for pattern in "${PATTERN_LIST[@]}"; do
