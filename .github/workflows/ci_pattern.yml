@@ -1,0 +1,149 @@
+name: CI Pattern Check
+
+on:
+  workflow_call:
+    inputs:
+      patterns:
+        description: "Pattern list to validate (splitted by commas)"
+        required: true
+        type: string
+      game:
+        description: "Game (fivem, redm, both, none)"
+        required: true
+        type: string
+
+permissions:
+  packages: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  pattern_check:
+    name: Pre-build Pattern Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone PatternV
+        run: git clone --depth 1 https://github.com/DaniGP17/PatternV.git
+
+      - name: Cache PatternV build
+        uses: actions/cache@v4
+        with:
+          path: PatternV/build
+          key: patternv-${{ hashFiles('PatternV/CMakeLists.txt') }}
+
+      - name: Build PatternV
+        run: |
+          cd PatternV
+          mkdir -p build && cd build
+          cmake ..
+          make -j$(nproc)
+
+      - name: Download .text files
+        run: |
+          BASE_URL="https://github.com/DaniGP17/fivem/releases/download/v.test"
+          ARCHIVE_NAME="GameBuildsText.7z"
+
+          mkdir -p Release/Builds
+          cd Release/Builds
+
+          echo "Downloading $ARCHIVE_NAME..."
+          curl -sSfL --retry 3 -o "$ARCHIVE_NAME" "$BASE_URL/$ARCHIVE_NAME" || { echo "Error downloading $ARCHIVE_NAME"; exit 1; }
+
+          echo "Extracting $ARCHIVE_NAME..."
+          7z x "$ARCHIVE_NAME" -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
+
+          echo "Done."
+
+      - name: Run PatternV
+        id: run_patternv
+        run: |
+          PATTERNS_RAW="${{ inputs.patterns }}"
+          PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
+          OUTPUT=""
+          FAIL=0
+
+          mapfile -t PATTERN_LIST <<< "$PATTERNS_CLEAN"
+          PATTERN_COUNT=${#PATTERN_LIST[@]}
+
+          for pattern in "${PATTERN_LIST[@]}"; do
+            echo "Searching pattern: $pattern"
+            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | tr '\r' '\n') || FAIL=2
+
+            GTA5_MATCHES=""
+            RDR2_MATCHES=""
+            HAS_MISSING="false"
+
+            while IFS= read -r line; do
+              if [[ "$line" =~ GTA5_([0-9]+) ]]; then
+                BUILD="${BASH_REMATCH[1]}"
+                if [[ "$line" =~ \(0\ matches\) ]]; then
+                  GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
+                  HAS_MISSING="true"
+                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
+                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                  GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                fi
+              elif [[ "$line" =~ RDR2_([0-9]+) ]]; then
+                BUILD="${BASH_REMATCH[1]}"
+                if [[ "$line" =~ \(0\ matches\) ]]; then
+                  RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
+                  HAS_MISSING="true"
+                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
+                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                  RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                fi
+              fi
+            done < <(echo "$RESULT")
+
+            if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" ]]; then
+              SECTION="Pattern: \`$pattern\`"
+              if [[ -n "$GTA5_MATCHES" ]]; then
+                SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
+              fi
+              if [[ -n "$RDR2_MATCHES" ]]; then
+                SECTION="$SECTION\n\nMatches 🐎:$RDR2_MATCHES"
+              fi
+              OUTPUT="$OUTPUT\n\n$SECTION\n\n---"
+            fi
+          done
+
+          OUTPUT=$(echo -e "$OUTPUT" | sed '$d')
+
+          ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
+          echo "output_b64=$ENCODED" >> $GITHUB_OUTPUT
+
+
+      
+      - name: Comment results on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const decoded = Buffer.from(`${{ steps.run_patternv.outputs.output_b64 }}`, 'base64').toString();
+            const maxLength = 65536;
+
+            if (decoded.length <= maxLength) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: decoded
+              });
+            } else {
+              console.log("Output too long, splitting into multiple comments...");
+              const chunks = [];
+              for (let i = 0; i < decoded.length; i += maxLength) {
+                chunks.push(decoded.substring(i, i + maxLength));
+              }
+
+              for (let i = 0; i < chunks.length; i++) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `**Part ${i + 1}/${chunks.length}**\n\n` + chunks[i]
+                });
+              }
+            }

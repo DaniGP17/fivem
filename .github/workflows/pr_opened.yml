@@ -23,6 +23,8 @@ jobs:
       PR_DESCR: ${{ github.event.pull_request.body }}
     outputs:
       requires_compilation: ${{ steps.check_changed_files.outputs.requires_compilation }}
+      patterns: ${{ steps.extract_patterns.outputs.patterns }}
+      game: ${{ steps.extract_patterns.outputs.game }}
     steps:
       - name: Check PR's changed files
         id: check_changed_files
@@ -164,16 +166,61 @@ jobs:
                 }
               }
             }
-            
-            if (addLabels.length > 0)
-            {
-              // triage label
-              github.rest.issues.addLabels({
-                ...issue,
-                labels: addLabels
-              });
-            }
+      - name: Extract patterns
+        id: extract_patterns
+        run: |
+          patterns=$(curl -ks "$FILES_URL" \
+          | jq -r '.[] | .patch' \
+          | grep '^+' \
+          | grep -oP '"(?:[0-9A-Fa-f]{2}|\?)(?:\s+(?:[0-9A-Fa-f]{2}|\?)){2,}"' \
+          | sed -E 's/^"//; s/"$//' \
+          | sort -u)
+
+          echo "Detected patterns:"
+          echo "$patterns"
+
+          if [[ -z "$patterns" ]]; then
+            echo "No patterns found. Skipping."
+            echo "game=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          patterns_csv=$(echo "$patterns" | paste -sd "," -)
+          echo "patterns=$patterns_csv" >> "$GITHUB_OUTPUT"
+
+          issueBody="${PR_DESCR:-}"
+
+          game="none"
+
+          if echo "$issueBody" | grep -iq "FiveM" && echo "$issueBody" | grep -iq "RedM"; then
+            game="both"
+          elif echo "$issueBody" | grep -iq "FiveM"; then
+            game="fivem"
+          elif echo "$issueBody" | grep -iq "RedM"; then
+            game="redm"
+          fi
+
+          echo "Detected game: $game"
+          echo "game=$game" >> "$GITHUB_OUTPUT"
   
+  pattern_check:
+    name: Pattern Check
+    permissions:
+      contents: read
+      pull-requests: write
+      packages: read
+    needs: input_validation
+    if: >-
+      ${{ 
+        needs.input_validation.outputs.requires_compilation == 'true' &&
+        needs.input_validation.outputs.patterns != '' &&
+        needs.input_validation.outputs.game != 'none' 
+      }}
+    uses: ./.github/workflows/ci_pattern.yml
+    with:
+      patterns: ${{ needs.input_validation.outputs.patterns }}
+      game: ${{ needs.input_validation.outputs.game }}
+
   build_all:
     name: Build
     permissions:
