@@ -47,6 +47,9 @@ static InitFunction initFunction([]()
 		g_disableRemotePedAttachment = enable;
 	});
 
+	const auto location = hook::get_pattern<char>("BA E7 8F A5 1E B9 BD C5 AF E3 E8");
+	const auto attachEntityToEntityTunable = hook::get_pattern<char>("BA 37 89 3D 8A B9 BD C5 AF E3");
+
 	Instance<ICoreGameInit>::Get()->OnShutdownSession.Connect([]()
 	{
 		g_disableRemotePedAttachment = false;
