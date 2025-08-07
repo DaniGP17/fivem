@@ -73,32 +73,42 @@ jobs:
             GTA5_MATCHES=""
             RDR2_MATCHES=""
             HAS_MISSING="false"
+            TOTAL_BUILDS=0
+            TOTAL_MATCHED=0
 
             while IFS= read -r line; do
               if [[ "$line" =~ GTA5_([0-9]+) ]]; then
+                ((TOTAL_BUILDS++))
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
                   HAS_MISSING="true"
-                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
-                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
-                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
-                  GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                else
+                  ((TOTAL_MATCHED++))
+                  if [[ "$PATTERN_COUNT" -le 3 ]]; then
+                    ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                    IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                    GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                  fi
                 fi
               elif [[ "$line" =~ RDR2_([0-9]+) ]]; then
+                ((TOTAL_BUILDS++))
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
                   RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
                   HAS_MISSING="true"
-                elif [[ "$PATTERN_COUNT" -le 3 ]]; then
-                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
-                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
-                  RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                else
+                  ((TOTAL_MATCHED++))
+                  if [[ "$PATTERN_COUNT" -le 3 ]]; then
+                    ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                    IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                    RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${ADDR_LIST[0]^^}"
+                  fi
                 fi
               fi
             done < <(echo "$RESULT")
 
-            if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" ]]; then
+            if [[ "$HAS_MISSING" == "true" || "$TOTAL_BUILDS" -lt 3 ]]; then
               SECTION="Pattern: \`$pattern\`"
               if [[ "$GAME" == "fivem" || "$GAME" == "both" ]] && [[ -n "$GTA5_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
