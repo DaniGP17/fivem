@@ -54,7 +54,7 @@ jobs:
           echo "Calculating SHA256 of downloaded archive..."
           sha256sum "$ARCHIVE_NAME"
 
-          echo "First char: ${ARCHIVE_PASSWORD:0:1}"
+          echo "Password is present? $([[ -n "$ARCHIVE_PASSWORD" ]] && echo yes || echo no)"
 
           echo "Extracting $ARCHIVE_NAME..."
           7z x "$ARCHIVE_NAME" -p$ARCHIVE_PASSWORD -y || { echo "Failed to extract archive"; exit 1; }
