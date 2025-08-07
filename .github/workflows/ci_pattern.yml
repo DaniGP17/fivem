@@ -106,24 +106,24 @@ jobs:
               if [[ "$line" =~ GTA5_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
-                  GTA5_MATCHES="$GTA5_MATCHES\n  - $BUILD: ❌"
+                  GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ❌"
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
                   for addr in "${ADDR_LIST[@]}"; do
-                    GTA5_MATCHES="$GTA5_MATCHES\n  - $BUILD: ${addr^^}"
+                    GTA5_MATCHES="$GTA5_MATCHES\n* $BUILD: ${addr^^}"
                     break
                   done
                 fi
               elif [[ "$line" =~ RDR2_([0-9]+) ]]; then
                 BUILD="${BASH_REMATCH[1]}"
                 if [[ "$line" =~ \(0\ matches\) ]]; then
-                  RDR2_MATCHES="$RDR2_MATCHES\n  - $BUILD: ❌"
+                  RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ❌"
                 else
                   ADDRS=$(echo "$line" | sed -E 's/.*: //')
                   IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
                   for addr in "${ADDR_LIST[@]}"; do
-                    RDR2_MATCHES="$RDR2_MATCHES\n  - $BUILD: ${addr^^}"
+                    RDR2_MATCHES="$RDR2_MATCHES\n* $BUILD: ${addr^^}"
                     break
                   done
                 fi
@@ -132,15 +132,18 @@ jobs:
 
             SECTION="Pattern: \`$pattern\`"
             if [[ -n "$GTA5_MATCHES" ]]; then
-              SECTION="$SECTION\n Matches 🚗:$GTA5_MATCHES"
+              SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
             fi
             if [[ -n "$RDR2_MATCHES" ]]; then
-              SECTION="$SECTION\n Matches 🐎:$RDR2_MATCHES"
+              SECTION="$SECTION\n\nMatches 🐎:$RDR2_MATCHES"
             fi
-            OUTPUT="$OUTPUT\n\n$SECTION\n\n"
+            OUTPUT="$OUTPUT\n\n$SECTION\n\n---"
 
           done <<< "$PATTERNS_CLEAN"
 
+          # Remove final "---" if needed
+          OUTPUT=$(echo -e "$OUTPUT" | sed '$d')
+          
           ENCODED=$(echo -e "$OUTPUT" | base64 -w0)
           echo "output_b64=$ENCODED" >> $GITHUB_OUTPUT
       
