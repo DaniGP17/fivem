@@ -97,10 +97,47 @@ jobs:
 
           while IFS= read -r pattern; do
             echo "Searching pattern: $pattern"
-            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | \
-              tr '\r' '\n' | \
-              sed -E 's/^\[\+\]/- [x]/; s/^\[-\]/- [ ]/') || FAIL=2
-            OUTPUT="$OUTPUT\n#### Pattern: $pattern\n\n$RESULT\n"
+            RESULT=$(timeout 60s ./PatternV/build/PatternV Release/Builds "$pattern" --no-color --hide-time --minified 2>&1 | tr '\r' '\n') || FAIL=2
+            
+            GTA5_MATCHES=""
+            RDR2_MATCHES=""
+
+            while IFS= read -r line; do
+              if [[ "$line" =~ GTA5_([0-9]+) ]]; then
+                BUILD="${BASH_REMATCH[1]}"
+                if [[ "$line" =~ \(0\ matches\) ]]; then
+                  GTA5_MATCHES="$GTA5_MATCHES\n  - $BUILD: ❌"
+                else
+                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                  for addr in "${ADDR_LIST[@]}"; do
+                    GTA5_MATCHES="$GTA5_MATCHES\n  - $BUILD: ${addr^^}"
+                    break
+                  done
+                fi
+              elif [[ "$line" =~ RDR2_([0-9]+) ]]; then
+                BUILD="${BASH_REMATCH[1]}"
+                if [[ "$line" =~ \(0\ matches\) ]]; then
+                  RDR2_MATCHES="$RDR2_MATCHES\n  - $BUILD: ❌"
+                else
+                  ADDRS=$(echo "$line" | sed -E 's/.*: //')
+                  IFS=',' read -ra ADDR_LIST <<< "$ADDRS"
+                  for addr in "${ADDR_LIST[@]}"; do
+                    RDR2_MATCHES="$RDR2_MATCHES\n  - $BUILD: ${addr^^}"
+                    break
+                  done
+                fi
+              fi
+            done <<< "$RESULT"
+
+            SECTION="Pattern: \`$pattern\`"
+            if [[ -n "$GTA5_MATCHES" ]]; then
+              SECTION="$SECTION\n Matches 🚗:$GTA5_MATCHES"
+            fi
+            if [[ -n "$RDR2_MATCHES" ]]; then
+              SECTION="$SECTION\n Matches 🐎:$RDR2_MATCHES"
+            fi
+            OUTPUT="$OUTPUT\n\`\`\`\n$SECTION\n\`\`\`\n"
 
           done <<< "$PATTERNS_CLEAN"
 
@@ -113,9 +150,28 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const decoded = Buffer.from(`${{ steps.run_patternv.outputs.output_b64 }}`, 'base64').toString();
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: decoded
-            });
+            const maxLength = 65536;
+
+            if (decoded.length <= maxLength) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: decoded
+              });
+            } else {
+              console.log("Output too long, splitting into multiple comments...");
+              const chunks = [];
+              for (let i = 0; i < decoded.length; i += maxLength) {
+                chunks.push(decoded.substring(i, i + maxLength));
+              }
+
+              for (let i = 0; i < chunks.length; i++) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `**Part ${i + 1}/${chunks.length}**\n\n` + chunks[i]
+                });
+              }
+            }
