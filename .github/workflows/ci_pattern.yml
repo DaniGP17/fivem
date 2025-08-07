@@ -58,6 +58,7 @@ jobs:
         id: run_patternv
         run: |
           PATTERNS_RAW="${{ inputs.patterns }}"
+          GAME="${{ inputs.game }}"
           PATTERNS_CLEAN=$(echo "$PATTERNS_RAW" | tr ',' '\n' | sed '/^\s*$/d')
           OUTPUT=""
           FAIL=0
@@ -99,10 +100,10 @@ jobs:
 
             if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" ]]; then
               SECTION="Pattern: \`$pattern\`"
-              if [[ -n "$GTA5_MATCHES" ]]; then
+              if [[ "$GAME" == "fivem" || "$GAME" == "both" ]] && [[ -n "$GTA5_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
               fi
-              if [[ -n "$RDR2_MATCHES" ]]; then
+              if [[ "$GAME" == "redm" || "$GAME" == "both" ]] && [[ -n "$RDR2_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🐎:$RDR2_MATCHES"
               fi
               OUTPUT="$OUTPUT\n\n$SECTION\n\n---"
