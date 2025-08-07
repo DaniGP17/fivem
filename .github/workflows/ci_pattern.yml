@@ -53,7 +53,7 @@ jobs:
           sha256sum "$ARCHIVE_NAME"
 
           echo "Extracting $ARCHIVE_NAME..."
-          7z x "$ARCHIVE_NAME" -p"${{ secrets.CFX_GAME_BUILDS_PASSWORD }}" -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
+          7z x "$ARCHIVE_NAME" -p${{ secrets.CFX_GAME_BUILDS_PASSWORD }} -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
 
           echo "Done."
 
