@@ -39,6 +39,8 @@ jobs:
           make -j$(nproc)
 
       - name: Download .text files
+        env:
+          ARCHIVE_PASSWORD: ${{ secrets.CFX_GAME_BUILDS_PASSWORD }}
         run: |
           BASE_URL="https://content.cfx.re/mirrors/client/actions-data"
           ARCHIVE_NAME="GameBuildsText.7z"
@@ -53,7 +55,7 @@ jobs:
           sha256sum "$ARCHIVE_NAME"
 
           echo "Extracting $ARCHIVE_NAME..."
-          7z x "$ARCHIVE_NAME" -p${{ secrets.CFX_GAME_BUILDS_PASSWORD }} -y > /dev/null || { echo "Failed to extract archive"; exit 1; }
+          7z x "$ARCHIVE_NAME" -p$ARCHIVE_PASSWORD -y || { echo "Failed to extract archive"; exit 1; }
 
           echo "Done."
 
