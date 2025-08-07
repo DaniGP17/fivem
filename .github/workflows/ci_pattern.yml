@@ -75,14 +75,18 @@ jobs:
             const existingPatterns = new Set();
 
             for (const comment of comments.data) {
+              console.log(`Checking comment:\n${comment.body}\n---`);
               let match;
               while ((match = patternRegex.exec(comment.body)) !== null) {
-                const cleaned = match[1].trim().toLowerCase(); // Normaliza
+                const cleaned = match[1].trim().toLowerCase();
+                console.log(`Detected pattern: '${match[1]}' => normalized: '${cleaned}'`);
                 existingPatterns.add(cleaned);
               }
             }
 
-            return Array.from(existingPatterns).join(',');
+            const result = Array.from(existingPatterns).join(',');
+            console.log(`All collected patterns: ${result}`);
+            return result;
 
       - name: Run PatternV
         id: run_patternv
@@ -120,9 +124,6 @@ jobs:
           GAME="${{ inputs.game }}"
           OUTPUT=""
           FAIL=0
-
-          mapfile -t PATTERN_LIST <<< "$FILTERED_PATTERNS"
-          PATTERN_COUNT=${#PATTERN_LIST[@]}
 
           for pattern in "${PATTERN_LIST[@]}"; do
             echo "Searching pattern: $pattern"
