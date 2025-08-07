@@ -108,7 +108,7 @@ jobs:
           while IFS= read -r pattern; do
             NORMALIZED=$(echo "$pattern" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
             SKIP="false"
-            for already in $ALREADY_ARRAY; do
+            for already in "${ALREADY_ARRAY[@]}"; do
               NORMALIZED_ALREADY=$(echo "$already" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g' | xargs)
               echo "Comparing '$NORMALIZED' with '$NORMALIZED_ALREADY'"
               if [[ "$NORMALIZED" == "$NORMALIZED_ALREADY" ]]; then
