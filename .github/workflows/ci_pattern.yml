@@ -74,7 +74,8 @@ jobs:
             for (const comment of comments.data) {
               let match;
               while ((match = patternRegex.exec(comment.body)) !== null) {
-                existingPatterns.add(match[1]);
+                const cleaned = match[1].trim().toLowerCase(); // Normaliza
+                existingPatterns.add(cleaned);
               }
             }
 
@@ -91,9 +92,10 @@ jobs:
 
           FILTERED_PATTERNS=""
           while IFS= read -r pattern; do
+            NORMALIZED=$(echo "$pattern" | tr '[:upper:]' '[:lower:]' | xargs)
             SKIP="false"
             for already in $ALREADY_ARRAY; do
-              if [[ "$pattern" == "$already" ]]; then
+              if [[ "$NORMALIZED" == "$already" ]]; then
                 SKIP="true"
                 break
               fi
