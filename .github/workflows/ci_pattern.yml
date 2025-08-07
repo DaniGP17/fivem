@@ -166,7 +166,7 @@ jobs:
               fi
             done < <(echo "$RESULT")
 
-            if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" ]]; then
+            if [[ "$PATTERN_COUNT" -le 3 || "$HAS_MISSING" == "true" || -z "$RESULT" ]]; then
               SECTION="Pattern: \`$pattern\`"
               if [[ "$GAME" == "fivem" || "$GAME" == "both" ]] && [[ -n "$GTA5_MATCHES" ]]; then
                 SECTION="$SECTION\n\nMatches 🚗:$GTA5_MATCHES"
