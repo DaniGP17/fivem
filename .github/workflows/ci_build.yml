@@ -66,15 +66,23 @@ jobs:
           cd "$ROOT_REPO"
 
           if [[ "$PLATFORM" == "windows" ]]; then
-            $sdkPath = "C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0"
-            if (-not (Test-Path $sdkPath)) {
-              Write-Host "Installing Windows SDK 22000..."
-              Start-Process "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" `
-                -ArgumentList "modify --installPath `"%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise`" --add Microsoft.VisualStudio.Component.Windows11SDK.22000 --quiet --norestart --nocache" `
-                -Wait -NoNewWindow
-            } else {
-              Write-Host "Windows SDK 22000 already installed."
-            }
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "
+              \$sdkPath = 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0';
+              if (-not (Test-Path \$sdkPath)) {
+                Write-Host 'Installing Windows SDK 22000...';
+                \$vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe';
+                if (Test-Path \$vswhere) {
+                  \$vsPath = & \$vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath;
+                }
+                if (-not \$vsPath) { \$vsPath = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise'; }
+                & 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe' `
+                  modify --installPath `\"\$vsPath`\" `
+                  --add Microsoft.VisualStudio.Component.Windows11SDK.22000 `
+                  --quiet --norestart --nocache
+              } else {
+                Write-Host 'Windows SDK 22000 already installed.'
+              }
+            "
           fi
           
           # messes with current build tools, so clear it
