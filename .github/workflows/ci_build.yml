@@ -66,19 +66,15 @@ jobs:
           cd "$ROOT_REPO"
 
           if [[ "$PLATFORM" == "windows" ]]; then
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "
-              \$sdkPaths = @(
-                'C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0',
-                'C:\Program Files\Windows Kits\10\Include\10.0.22000.0'
-              );
-              \$exists = \$sdkPaths | Where-Object { Test-Path \$_ } | Measure-Object | Select-Object -ExpandProperty Count;
-              if (-not \$exists) {
-                Write-Host 'Installing Windows SDK 10.0.22000...';
-                winget install --id Microsoft.WindowsSDK.10.0.22000 -e --accept-package-agreements --accept-source-agreements;
-              } else {
-                Write-Host 'Windows SDK 10.0.22000 already present.';
-              }
-            "
+            $sdkPath = "C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0"
+            if (-not (Test-Path $sdkPath)) {
+              Write-Host "Installing Windows SDK 22000..."
+              Start-Process "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" `
+                -ArgumentList "modify --installPath `"%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise`" --add Microsoft.VisualStudio.Component.Windows11SDK.22000 --quiet --norestart --nocache" `
+                -Wait -NoNewWindow
+            } else {
+              Write-Host "Windows SDK 22000 already installed."
+            }
           fi
           
           # messes with current build tools, so clear it
