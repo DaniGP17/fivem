@@ -226,6 +226,28 @@ static uint64_t* sub_140A3EF0C(void* thisPtr, void* outDevice, uint32_t inputId,
 	return result;
 }
 
+static void* (*g_origDoEnableInput)(void*, uint32_t);
+static void* DoEnableInput(void* thisPtr, uint32_t inputId)
+{
+	if(inputId & 0x80000000)
+	{
+		trace("DoEnableInput for custom input: %d\n", inputId);
+		inputId = 0; // Safe input id
+	}
+	return g_origDoEnableInput(thisPtr, inputId);
+}
+
+static void (*g_origsub_142C38838)(void*, uint32_t, void*);
+static void sub_142C38838(void* thisPtr, uint32_t inputId, void* bitmask)
+{
+	if(inputId & 0x80000000)
+	{
+		trace("sub_142C38838 for custom input: %d\n", inputId);
+		inputId = 0; // Safe input id
+	}
+	g_origsub_142C38838(thisPtr, inputId, bitmask);
+}
+
 static atArray<rage::MappingList>* g_mappingLists = nullptr;
 
 static HookFunction hookFunction([]()
@@ -239,6 +261,8 @@ static HookFunction hookFunction([]()
 	g_origGetActionName = hook::trampoline(hook::get_pattern("48 63 D1 48 8D 0D ? ? ? ? E9"), GetActionName);
 	g_origGetBindingForControl = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 74 24 ? 48 89 7C 24 ? 41 56 48 83 EC ? 48 8D 99 ? ? ? ? 41 8B F0"), GetBindingForControl);
 	g_origGetInputByName = hook::trampoline(hook::get_pattern("48 83 EC ? 48 8B D1 45 33 C9"), GetInputByName);
+	g_origDoEnableInput = hook::trampoline(hook::get_pattern("0F B7 41 ? 3B D0 73 ? 8B C2 48 69 D0 ? ? ? ? 48 8B 41 ? 44 0F B7 84 02"), DoEnableInput);
+	g_origsub_142C38838 = hook::trampoline(hook::get_pattern("48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 48 89 78 ? 41 56 48 83 EC ? 48 8B F1 49 8B F8"), sub_142C38838);
 	
 	//g_origIsInputConflicting = hook::trampoline(hook::get_pattern("48 89 74 24 ? 48 89 7C 24 ? 4C 89 74 24 ? 4C 8B 09"), IsInputConflicting);
 	//g_origHandleInputConflicts = hook::trampoline(hook::get_pattern("48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 48 89 78 ? 41 54 41 56 41 57 48 83 EC ? 4C 8B 1D ? ? ? ? 40 32 ED"), HandleInputConflicts);

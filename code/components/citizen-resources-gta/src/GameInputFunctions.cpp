@@ -1,6 +1,6 @@
 #include <StdInc.h>
 
-#if __has_include(<GameInput.h>)
+#if __has_include(<GameInput.h>) && 0
 #include <GameInput.h>
 
 #include <ScriptEngine.h>
