@@ -1,178 +1,190 @@
 #include "StdInc.h"
 #include "GameInput.h"
-
 #include "atArray.h"
 #include "CustomText.h"
 #include "Hooking.h"
 #include "Hooking.Stubs.h"
+#include <array>
+#include <unordered_set>
 
-namespace rage
+#include "nutsnbolts.h"
+#include "RageParser.h"
+#include "console/Console.CommandHelpers.h"
+
+constexpr int UNBINDED_KEY = 0xFF000;
+constexpr int MAPPING_COUNT = 2; // One for the first bind entry and another for the second bind
+constexpr int MAX_CUSTOM_BINDINGS = 5;
+
+class CustomBinding
 {
-	struct MappingList
+private:
+	bool m_dummy = true;          // True if this slot is available for use
+	bool m_wasDown = false;       // Internal state for processing updates
+	std::string m_inputName;      // Input name for the game input system (e.g., "INPUT_CUSTOM1")
+	std::string m_command;        // Command name for scripts
+	std::string m_tag;            // Script name
+	std::string m_description;    // Description for UI
+	uint32_t m_hash;              // HashBinding(inputName) hash of the INPUT name
+	
+	// Bind entries for each mapping (primary and secondary)
+	std::array<void*, MAPPING_COUNT> m_bindEntries = { nullptr, nullptr };
+	
+	// Binded keys for each mapping(including modifiers)
+	std::array<std::array<int, 2>, MAPPING_COUNT> m_bindedKeys = {{
+		{UNBINDED_KEY, UNBINDED_KEY},
+		{UNBINDED_KEY, UNBINDED_KEY}
+	}};
+
+public:
+	// Getters
+	bool IsDummy() const { return m_dummy; }
+	bool HasBindedKeys() const
 	{
-		void* vtable;
-		uint32_t m_Name;
-		char pad[4];
-		atArray<uint32_t> m_Categories;
-	};
+		for (const auto& keys : m_bindedKeys)
+		{
+			if (keys[0] != UNBINDED_KEY || keys[1] != UNBINDED_KEY)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	const std::string& GetInputName() const { return m_inputName; }
+	const std::string& GetCommand() const { return m_command; }
+	const std::string& GetTag() const { return m_tag; }
+	const std::string& GetDescription() const { return m_description; }
+	uint32_t GetHash() const { return m_hash; }
+	void* GetBindEntry(int index) const { return m_bindEntries[index]; }
+	const std::array<int, 2>& GetBindedKeys(int mappingIndex) const { return m_bindedKeys[mappingIndex]; }
+	
+	// Setters
+	void SetDummy(bool dummy) { m_dummy = dummy; }
+	void SetInputName(const std::string& inputName) { m_inputName = inputName; }
+	void SetCommand(const std::string& command) { m_command = command; }
+	void SetTag(const std::string& tag) { m_tag = tag; }
+	void SetDescription(const std::string& description) { m_description = description; }
+	void SetHash(uint32_t hash) { m_hash = hash; }
+	void SetBindEntry(int index, void* entry) { m_bindEntries[index] = entry; }
+	void SetBindedKeys(int mappingIndex, const std::array<int, 2>& keys) { m_bindedKeys[mappingIndex] = keys; }
+	void SetBindedKey(int mappingIndex, int keyIndex, int value) { m_bindedKeys[mappingIndex][keyIndex] = value; }
+
+	void Update();
+};
+
+void CustomBinding::Update()
+{
+	trace("Process update for custom binding: %s\n", m_command.c_str());
 }
 
-static std::vector<std::string> g_bindings = {
-	"INPUT_TEST1",
-};
+static std::unordered_map<uint32_t, CustomBinding> g_customBindings;
+static std::unordered_set<void*> g_customBindEntryPointers;
+static std::map<std::string, int, console::IgnoreCaseLess> ioParameterMap;
+static std::recursive_mutex g_customBindingsMutex;
+
+static uintptr_t* BindEntryVTable = nullptr;
+static uint32_t* pendingBindId = nullptr;
+static bool BindingInitiated = false;
+static void* InitializeCategoryInputsCallAddr = nullptr;
+
+static std::array<int, 2> GetBindedKey(uint32_t hash, int mappingIndex)
+{
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	auto it = g_customBindings.find(hash);
+	if (it != g_customBindings.end())
+	{
+		return it->second.GetBindedKeys(mappingIndex);
+	}
+	return { UNBINDED_KEY, UNBINDED_KEY };
+}
+
+static void UpdateBindedKey(uint32_t hash, int key, int mappingIndex)
+{
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	auto it = g_customBindings.find(hash);
+	if (it != g_customBindings.end())
+	{
+		it->second.SetBindedKey(mappingIndex, 0, key);
+		it->second.SetBindedKey(mappingIndex, 1, UNBINDED_KEY);
+	}
+}
 
 static uint32_t HashBinding(const std::string& key)
 {
 	return HashString(key.c_str()) | 0x80000000;
 }
 
-static hook::cdecl_stub<void*(void*)> fwUIBindCtor([]()
-{
-	return hook::get_call(hook::get_pattern("E8 ? ? ? ? 4C 8B F8 EB ? 4C 8B FF 48 8B D3"));
-});
-
-static hook::cdecl_stub<void(int, uint32_t, char*)> addString([]()
-{
-	return hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8D 55 ? EB ? 48 8B D7"));
-});
-
-static hook::cdecl_stub<uint32_t(int, char*)> computeHash([]()
-{
-	return hook::get_call(hook::get_pattern("E8 ? ? ? ? 89 86 ? ? ? ? 45 33 C9"));
-});
-
-/*static hook::cdecl_stub<char*(void*, uint32_t)> nameFromValueUnsafe([]()
-{
-	return hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B D0 B9 ? ? ? ? 48 8B F8 E8 ? ? ? ? 4C 8B C7 8B D0 B9 ? ? ? ? 8B D8 E8 ? ? ? ? 48 8B 4D"));
-});*/
-
-/*static hook::cdecl_stub<void(void*, void* void*)> registerBindingClient([]()
-{
-	
-});*/
-
 static void* g_inputTypeData = nullptr;
-
-/*static void RegisterBind(std::string bind)
-{
-	void* v8 = operator new(472);
-	auto v9 = fwUIBindCtor(v8);
-	auto bindHash = HashBinding(bind);
-	addString(8, bindHash, (char*)bind.c_str());
-	registerBindingClient(HashString("PM_PANE_CFX"), v9)
-}*/
 
 static void (*g_origGetMappingCategories)(atArray<unsigned int>& outCategories);
 static void GetMappingCategories(atArray<unsigned int>& outCategories)
 {
 	g_origGetMappingCategories(outCategories);
 	outCategories.Set(outCategories.GetCount(), HashString("PM_PANE_CFX"));
-	trace("Added custom mapping category PM_PANE_CFX\n");
-}
-
-static const char* (*g_origGetActionName)(uint32_t controlId);
-static const char* GetActionName(uint32_t controlId)
-{
-	/*if (controlId & 0x80000000)
-	{
-		static std::string str;
-		str = fmt::sprintf("INPUT_%08X", HashString(g_bindings[0]));
-
-		std::string displayName;
-		displayName = fmt::sprintf("%s", "danii");
-		game::AddCustomText(HashString(str.c_str()), displayName);
-
-		trace("Get action name for special control %08x: %s\n", controlId, str.c_str());
-		return str.c_str();
-	}*/
-	return g_origGetActionName(controlId);
 }
 
 static void* (*g_origGetCategoryInputs)(uint32_t* categoryHash, atArray<uint32_t>& controlIds);
 static void* GetCategoryInputs(uint32_t* categoryHash, atArray<uint32_t>& controlIds)
 {
-	trace("Get category inputs: %08x\n", *categoryHash);
+	bool includeDummy = (_ReturnAddress() == InitializeCategoryInputsCallAddr);
+	
 	auto result = g_origGetCategoryInputs(categoryHash, controlIds);
 	if (*categoryHash == HashString("PM_PANE_CFX"))
 	{
-		trace("Tried to get inputs for PM_PANE_CFX\n");
-		for (const auto& id : g_bindings)
+		std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+		for (const auto& [hash, binding] : g_customBindings)
 		{
-			/*GetActionName(HashBinding(id));
-			auto v14 = HashBinding(id);
-			addString(1, v14, (char*)id.c_str());*/
-			
-			//controlIds.Set(controlIds.GetCount(), 100);
-			controlIds.Set(controlIds.GetCount(), HashBinding(id));
-		}
-	}
-	else
-	{
-		/*for (int i = 0; i < controlIds.GetCount(); i++)
-		{
-			if (controlIds.Get(i) == 100)
+			// Only include non-dummy bindings (or all if called during initialization)
+			//if (!binding.dummy || includeDummy)
 			{
-				trace("Removing 100 from category %08x\n", *categoryHash);
-				controlIds.Remove(i);
-				i--;
+				controlIds.Set(controlIds.GetCount(), hash);
 			}
-		}*/
+		}
 	}
 	return result;
 }
 
-static void*(*g_origGetBindingForControl)(void* control, void* outBinding, uint32_t controlId);
-static void* GetBindingForControl(void* control, void* outBinding, uint32_t controlId)
+static hook::cdecl_stub<char*(void*, uint32_t)> getNameFromValueUnsafe([]()
 {
-	if (controlId & 0x80000000)
+	return hook::get_pattern("4C 8B 41 ? 33 C0 4C 8B CA");
+});
+
+static hook::cdecl_stub<void*()> ctorBindEntry([]()
+{
+	return hook::get_pattern("48 83 EC ? B9 ? ? ? ? E8 ? ? ? ? 45 33 C9 48 8B D0 48 85 C0 74 ? 65 48 8B 0C 25 ? ? ? ? 48 8D 05 ? ? ? ? 48 89 02 48 8D 05");
+});
+
+static hook::cdecl_stub<void*(char)> getMainFrontendControl([]()
+{
+	return hook::get_call(hook::get_pattern("E8 ? ? ? ? 41 B8 ? ? ? ? 48 8D 54 24 ? 48 8B C8 E8 ? ? ? ? F3 0F 10 35 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8D 05 ? ? ? ? 0F 28 CE 48 8B C8 E8 ? ? ? ? 84 C0 75"));
+});
+
+static char* GetNameFromInput(void* data, uint32_t index)
+{
+	if (index & 0x80000000)
 	{
-		trace("Special binding for control %08x\n", controlId);
-
-		//return outBinding;
-	}
-
-	return g_origGetBindingForControl(control, outBinding, controlId);
-}
-
-static bool (*g_origUpdateBindingState)(void*, uint32_t, void*);
-static bool UpdateBindingState(void* self, uint32_t controlId, void* bitmask)
-{
-	trace("Update binding state: %d\n", controlId);
-
-	return g_origUpdateBindingState(self, controlId, bitmask);
-}
-
-
-static const char* GetBindingName(uint32_t controlId)
-{
-	static thread_local char buf[64];
-	strcpy_s(buf, "INPUT_TEST1");
-	return buf;
-}
-
-static char* (*g_origNameFromValueUnsafe)(void* data, uint32_t index);
-static char* GetNameFromValueUnsafe(void* data, uint32_t index)
-{
-	if (g_inputTypeData == data)
-	{
-		if(index > 700)
+		std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+		thread_local char buf[64];
+		
+		auto it = g_customBindings.find(index);
+		if (it != g_customBindings.end())
 		{
-			trace("Hooked nameFromValueUnsafe for index %d\n", index);
-			static thread_local char buf[64];
-			strcpy_s(buf, "INPUT_TEST1");
+			strcpy_s(buf, it->second.GetInputName().c_str());
 			return buf;
 		}
+		
+		buf[0] = '\0';
+		return buf;
 	}
 
-	return g_origNameFromValueUnsafe(data, index);
+	return getNameFromValueUnsafe(data, index);
 }
 
-static void* (*g_origFindDeviceForInput)(int64_t thisPtr, uint64_t* outDevice, uint32_t inputId, uint8_t inputType, uint16_t deviceIndex, bool isAnalog);
-static void* FindDeviceForInput(int64_t thisPtr, uint64_t* outDevice, uint32_t inputId, uint8_t inputType, uint16_t deviceIndex, bool isAnalog)
+static const char* (*g_origGetActionName)(uint32_t controlId);
+static const char* GetActionName(uint32_t controlId)
 {
-	auto result = g_origFindDeviceForInput(thisPtr, outDevice, inputId, inputType, deviceIndex, isAnalog);
-	//trace("FindDeviceForInput: %d %p\n", inputId, (void*)outDevice);
-	return result;
+	return GetNameFromInput(g_inputTypeData, controlId);
 }
 
 static uint32_t (*g_origGetInputByName)(char*);
@@ -180,13 +192,14 @@ static uint32_t GetInputByName(char* name)
 {
 	auto control = g_origGetInputByName(name);
 	
-	if(control == -1)
+	if(control <= 0)
 	{
-		for (const auto& bind : g_bindings)
+		std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+		for (const auto& [hash, binding] : g_customBindings)
 		{
-			if (_stricmp(name, bind.c_str()) == 0)
+			if (_stricmp(name, binding.GetInputName().c_str()) == 0)
 			{
-				control = HashBinding(bind);
+				control = hash;
 				break;
 			}
 		}
@@ -195,96 +208,440 @@ static uint32_t GetInputByName(char* name)
 	return control;
 }
 
-static bool (*g_origIsInputConflicting)(atArray<int>&, uint32_t);
-static bool IsInputConflicting(atArray<int>& categoryInputs, uint32_t controlId)
+static void* CreateBindEntry(uint32_t hash, bool isFirst)
 {
-	//if(controlId & 0x80000000)
-	{
-		//trace("Returning false in conflict for custom input");
-		return false;
-	}
-	return g_origIsInputConflicting(categoryInputs, controlId);
+	auto bind = ctorBindEntry();
+	auto* bindStruct = reinterpret_cast<hook::FlexStruct*>(bind);
+	
+	// Set vtable
+	bindStruct->Set<uintptr_t*>(0x0, BindEntryVTable);
+	
+	// Set bind entry fields
+	bindStruct->Set<bool>(0x11, isFirst);
+	bindStruct->Set<uint32_t>(0x2C, hash);
+	
+	return bind;
 }
 
-static bool (*g_origHandleInputConflicts)(void*, uint32_t);
-static bool HandleInputConflicts(void* self, uint32_t controlId)
+static void* GetBindEntry(uint32_t hash, int mappingIndex)
 {
-	trace("Input conflict: %d\n", controlId);
-	//if (controlId & 0x80000000)
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	if (mappingIndex > MAPPING_COUNT - 1)
 	{
-		//trace("Returning false in handle conflict for custom input\n");
-		return false;
+		return nullptr;
 	}
-	return g_origHandleInputConflicts(self, controlId);
+
+	auto it = g_customBindings.find(hash);
+	if (it == g_customBindings.end())
+	{
+		// Binding not found, should not happen
+		return nullptr;
+	}
+
+	auto& binding = it->second;
+	
+	// Create bind entries if they don't exist yet
+	if (binding.GetBindEntry(0) == nullptr)
+	{
+		binding.SetBindEntry(0, CreateBindEntry(hash, true));
+		binding.SetBindEntry(1, CreateBindEntry(hash, false));
+		
+		// Add to fast lookup set
+		g_customBindEntryPointers.insert(binding.GetBindEntry(0));
+		g_customBindEntryPointers.insert(binding.GetBindEntry(1));
+	}
+
+	return binding.GetBindEntry(mappingIndex);
 }
 
-static uint64_t* (*g_origsub_140A3EF0C)(void*, void*, uint32_t, char, unsigned __int16, char);
-static uint64_t* sub_140A3EF0C(void* thisPtr, void* outDevice, uint32_t inputId, char inputType, unsigned __int16 deviceIndex, char isAnalog)
+static bool IsCustomBindEntry(void* bindEntry)
 {
-	auto result = g_origsub_140A3EF0C(thisPtr, outDevice, inputId, inputType, deviceIndex, isAnalog);
-	trace("sub_140A3EF0C: %d %p\n", inputId, (void*)outDevice);
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	return g_customBindEntryPointers.find(bindEntry) != g_customBindEntryPointers.end();
+}
+
+static void* (*g_origFindDeviceForInput)(void* thisPtr, void** outDevice, uint32_t inputId, uint8_t inputType, uint16_t deviceIndex, bool isAnalog);
+static void* FindDeviceForInput(void* thisPtr, void** outDevice, uint32_t inputId, uint8_t inputType, uint16_t deviceIndex, bool isAnalog)
+{
+	if (inputId & 0x80000000)
+	{
+		std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+		*outDevice = GetBindEntry(inputId, deviceIndex);
+		return outDevice;
+	}
+	
+	return g_origFindDeviceForInput(thisPtr, outDevice, inputId, inputType, deviceIndex, isAnalog);
+}
+
+struct PatternPair
+{
+	std::string_view pattern;
+	int offset;
+};
+
+static void RegisterBinding(const std::string& tag, const std::string& command, const std::string& description, bool isDummy = false)
+{
+	uint32_t hash = HashBinding(command);
+	
+	CustomBinding binding;
+	binding.SetDummy(isDummy);
+	binding.SetInputName(command);  // For dummy slots, inputName and command are the same
+	binding.SetCommand(command);
+	binding.SetTag(tag);
+	binding.SetDescription(description);
+	binding.SetHash(hash);
+	
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	g_customBindings[hash] = std::move(binding);
+	game::AddCustomText("KMS_" + command, description);
+}
+
+static bool RegisterDynamicBinding(const std::string& tag, const std::string& command, const std::string& description, const std::string& ioParamName)
+{
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	// Find first available dummy slot
+	for (auto it = g_customBindings.begin(); it != g_customBindings.end(); ++it)
+	{
+		auto& [oldHash, binding] = *it;
+		
+		if (binding.IsDummy())
+		{
+			// Found a free slot - keep the original inputName (e.g., INPUT_CUSTOM1)
+			std::string originalInputName = binding.GetInputName();
+			uint32_t originalHash = binding.GetHash();
+			
+			// Update the binding in place
+			binding.SetDummy(false);
+			binding.SetCommand(command);  // New command name (e.g., "dani")
+			// binding.inputName stays the same (e.g., "INPUT_CUSTOM1")
+			// binding.hash stays the same (hash of INPUT_CUSTOM1)
+
+			/*int ioParam = UNBINDED_KEY;
+			auto ioIt = ioParameterMap.find(ioParamName);
+			if (ioIt != ioParameterMap.end())
+			{
+				ioParam = ioIt->second;
+			}
+			
+			binding.bindedKeys = {{
+				{ioParam, UNBINDED_KEY},
+				{UNBINDED_KEY, UNBINDED_KEY}
+			}};*/
+			binding.SetTag(tag);
+			binding.SetDescription(description);
+			
+			game::AddCustomText("KMS_" + originalInputName, description);
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+static bool UnregisterDynamicBinding(const std::string& command)
+{
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	// Find the binding by command name (not hash, since we're searching by command)
+	for (auto& [hash, binding] : g_customBindings)
+	{
+		if (!binding.IsDummy() && binding.GetCommand() == command)
+		{
+			// Reset to dummy state
+			binding.SetDummy(true);
+			binding.SetCommand(binding.GetInputName());  // Reset command back to inputName
+			binding.SetTag("redm_collective");
+			binding.SetDescription("Available slot");
+			
+			// Reset binded keys
+			binding.SetBindedKeys(0, {UNBINDED_KEY, UNBINDED_KEY});
+			binding.SetBindedKeys(1, {UNBINDED_KEY, UNBINDED_KEY});
+			
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+static void* (*g_origGetMappedInputs)(void* a1, void** a2, uint16_t a3, uint16_t a4);
+static void* GetMappedInputs(void* a1, void** a2, uint16_t a3, uint16_t a4)
+{
+	auto bind = (hook::FlexStruct*)*a2;
+	auto isFirst = bind->At<bool>(0x11);
+	auto inputId = bind->At<uint32_t>(0x2C);
+
+	if(IsCustomBindEntry(bind))
+	{
+		auto* data = reinterpret_cast<int*>(a1);
+		auto keys = GetBindedKey(inputId, isFirst ? 0 : 1);
+		
+		data[0] = keys[0];
+		data[1] = keys[1];
+		data[2] = 0x3; // Unk
+
+		return data;
+	}
+	
+	return g_origGetMappedInputs(a1, a2, a3, a4);
+}
+
+static int64_t (__fastcall *g_origGetBindingCount)(hook::FlexStruct* self);
+static int64_t __fastcall GetBindingCount(hook::FlexStruct* self)
+{
+	auto result = g_origGetBindingCount(self);
+	
+	if (IsCustomBindEntry(self))
+	{
+		result = 1;
+	}
+	
 	return result;
 }
 
-static void* (*g_origDoEnableInput)(void*, uint32_t);
-static void* DoEnableInput(void* thisPtr, uint32_t inputId)
+static int (*g_origGetMappingCount)(void* self);
+static int GetMappingCount(void* self)
 {
-	if(inputId & 0x80000000)
+	auto result = g_origGetMappingCount(self);
+
+	if (IsCustomBindEntry(self))
 	{
-		trace("DoEnableInput for custom input: %d\n", inputId);
-		inputId = 0; // Safe input id
+		result = 1;
 	}
-	return g_origDoEnableInput(thisPtr, inputId);
+	
+	return result;
 }
 
-static void (*g_origsub_142C38838)(void*, uint32_t, void*);
-static void sub_142C38838(void* thisPtr, uint32_t inputId, void* bitmask)
+static int64_t (*g_origFindRebindConflicts)(void* self, uint64_t* out, uint32_t inputId, int64_t a4, char a5);
+static int64_t FindRebindConflicts(void* self, uint64_t* out, uint32_t inputId, int64_t a4, char a5)
 {
-	if(inputId & 0x80000000)
+	if (inputId & 0x80000000)
 	{
-		trace("sub_142C38838 for custom input: %d\n", inputId);
-		inputId = 0; // Safe input id
+		return 0;
 	}
-	g_origsub_142C38838(thisPtr, inputId, bitmask);
+
+	return g_origFindRebindConflicts(self, out, inputId, a4, a5);
 }
 
-static atArray<rage::MappingList>* g_mappingLists = nullptr;
+static bool (*g_origUpdateBindInput)(hook::FlexStruct* self, int keyId, uint16_t mappingIndex);
+static bool UpdateBindInput(hook::FlexStruct* self, int keyId, uint16_t mappingIndex)
+{
+	auto result = g_origUpdateBindInput(self, keyId, mappingIndex);
+	
+	auto isFirst = self->At<bool>(0x11);
+	auto inputId = self->At<uint32_t>(0x2C);
+
+	if (inputId & 0x80000000)
+	{
+		UpdateBindedKey(inputId, keyId, isFirst ? 0 : 1);
+	}
+	
+	return result;
+}
+
+static void* (*g_origProcessBindingRequestStep)(hook::FlexStruct* self, uint32_t checkingInputId);
+static void* ProcessBindingRequestStep(hook::FlexStruct* self, uint32_t checkingInputId)
+{
+	if (*pendingBindId & 0x80000000)
+	{
+		return 0;
+	}
+	
+	return g_origProcessBindingRequestStep(self, checkingInputId);
+}
+
+static int GetBindedKey_Vtable(void* self, uint16_t mappingIndex)
+{
+	auto* bind = reinterpret_cast<hook::FlexStruct*>(self);
+	auto inputId = bind->At<uint32_t>(0x2C);
+	auto isFirst = bind->At<bool>(0x11);
+
+	if (IsCustomBindEntry(self))
+	{
+		auto keys = GetBindedKey(inputId, isFirst ? 0 : 1);
+		return keys[mappingIndex];
+	}
+
+	// Check if bind entry has valid data
+	if (bind->At<uint32_t>(0x18) != 0 && mappingIndex < bind->At<uint16_t>(0x28))
+	{
+		uint32_t* array = bind->At<uint32_t*>(0x20);
+		return array[mappingIndex];
+	}
+
+	return UNBINDED_KEY;
+}
+
+static void InitializeInputMappings()
+{
+	auto structureField = rage::GetStructureDefinition("rage__InputCalibration__Data");
+
+	auto enumeration = structureField->m_members[0]->m_definition->enumData;
+	auto name = enumeration->names;
+	auto field = enumeration->fields;
+
+	int count = 0;
+	// The data is interleaved: [hash0, value0, hash1, value1, ...]
+	while (name && *name != nullptr)
+	{
+		uint32_t keyHash = field->hash;
+		field++;
+		
+		// The "hash" of this field is actually the key value
+		uint32_t keyValue = field->hash;
+		
+		std::string_view thisName = *name;
+		if (thisName.find("KEY_") == 0)
+		{
+			thisName = thisName.substr(thisName.find_first_of('_') + 1);
+		}
+
+		ioParameterMap[std::string(thisName)] = keyValue;
+
+		name++;
+		field++;
+		count++;
+	}
+}
+
+static void (*g_origInitializeCategoryInputs)(void* self, void** a2);
+static void InitializeCategoryInputs(void* self, void** a2)
+{
+	g_origInitializeCategoryInputs(self, a2);
+
+	if (BindingInitiated)
+	{
+		return;
+	}
+	BindingInitiated = true;
+	InitializeInputMappings();
+}
+
+static void ProcessCustomBindings()
+{
+	std::lock_guard<std::recursive_mutex> lock(g_customBindingsMutex);
+	
+	// Iterate through all bindings and update non-dummy ones
+	for (auto& [hash, binding] : g_customBindings)
+	{
+		if (!binding.IsDummy() && binding.HasBindedKeys())
+		{
+			binding.Update();
+		}
+	}
+}
+
+static void (*g_origIoMapperUpdate)(void* self, uint32_t time, bool forceKeyboardMouse, float formal);
+static void IoMapperUpdate(void* self, uint32_t time, bool forceKeyboardMouse, float formal)
+{
+	ProcessCustomBindings();
+	g_origIoMapperUpdate(self, time, forceKeyboardMouse, formal);
+}
 
 static HookFunction hookFunction([]()
 {
-	game::AddCustomText("INPUT_TEST1", "Test Binding 1");
-	game::AddCustomText("KMS_INPUT_TEST1", "Test Binding 1");
+	g_origIoMapperUpdate = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 0F 57 D2 48 8D 05 ? ? ? ? F3 0F 6F 88")), IoMapperUpdate);
 	
-	game::AddCustomText("PM_PANE_CFX", "RedM");
-	g_origGetMappingCategories = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B 7C 24 ? 45 8B F4")), GetMappingCategories);
+	// Call to handle the initialize of binding system
+	g_origInitializeCategoryInputs = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 54 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8B EC 48 83 EC ? 48 8B DA 4C 8B E9"), InitializeCategoryInputs);
+
+	// The address of the return addr of GetCategoryInputs when initializing inputs
+	InitializeCategoryInputsCallAddr = hook::get_pattern("E8 ? ? ? ? 48 8B 75 ? 44 8B F7", 0x5);
+	
+	// Function of UI to get the mapped inputs for a bind entry
+	g_origGetMappedInputs = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 6C 24 ? 56 57 41 56 48 83 EC ? B8"), GetMappedInputs);
+	
+	BindEntryVTable = hook::get_address<uintptr_t*>(hook::get_pattern("48 8D 05 ? ? ? ? 48 89 03 4C 89 63 ? 44 89 63 ? EB ? 49 8B DC 49 8B D6", 0x3));
+	// Override the GetBindedKey function in the BindEntry Vtable
+	hook::put<uintptr_t>(&BindEntryVTable[14], (uintptr_t)GetBindedKey_Vtable);
+
+	// Hook binding and mapping count getter functions to return 1 for custom bindings
+	{
+		g_origGetBindingCount = hook::trampoline(hook::get_pattern("48 83 ec 28 48 8b 49 18 33 c0 48 85 c9 74 06 48 8b 01 ff 50 38 48 83 c4 28"), GetBindingCount);
+		g_origGetMappingCount = hook::trampoline(hook::get_pattern("48 83 ec 28 48 8b 49 18 33 c0 48 85 c9 74 06 48 8b 01 ff 50 68 48 83 c4 28 c3"), GetMappingCount);
+	}
+
+	// Skip rebind conflicts for custom bindings
+	{
+		g_origFindRebindConflicts = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 81 EC ? ? ? ? 48 8B DA 41 8B F8"), FindRebindConflicts);
+		g_origProcessBindingRequestStep = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 44 8A 89"), ProcessBindingRequestStep);
+	}
+
+	// Update the binded key when rebinding
+	g_origUpdateBindInput = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B D9 33 C0 48 8B 49"), UpdateBindInput);
+
+	// Global bind entry that stores the bind that is being modified
+	pendingBindId = hook::get_address<uint32_t*>(hook::get_pattern("8B 05 ? ? ? ? 45 33 FF 85 C0", 0x2));
+
+	// Function that retrieve the BindEntry for an input, we create BindEntries for our custom bindings
+	g_origFindDeviceForInput = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B 5C 24 ? 48 85 DB 74 ? 8B 05")), FindDeviceForInput);
+	
+	// Test command to register bindings dynamically
+	static auto registerCmd = std::make_unique<ConsoleCommand>("bind_register", [](const std::string& command, const std::string& description, const std::string& ioParamName)
+	{
+		if (RegisterDynamicBinding("redm_collective", command, description, ioParamName))
+		{
+			console::Printf("^2Successfully registered binding: %s\n", command.c_str());
+		}
+		else
+		{
+			console::Printf("^1Failed to register binding: %s (no free slots)\n", command.c_str());
+		}
+	});
+	
+	static auto unregisterCmd = std::make_unique<ConsoleCommand>("bind_unregister", [](const std::string& command)
+	{
+		if (UnregisterDynamicBinding(command))
+		{
+			console::Printf("^2Successfully unregistered binding: %s\n", command.c_str());
+		}
+		else
+		{
+			console::Printf("^1Failed to unregister binding: %s\n", command.c_str());
+		}
+	});
+
+	// Initialize all dummy slots
+	for (int i = 0; i < MAX_CUSTOM_BINDINGS; i++)
+	{
+		RegisterBinding("redm_collective", fmt::sprintf("INPUT_CUSTOM%d", i + 1), fmt::sprintf("RedM Collective Custom Input %d", i + 1), true);
+	}
+
+	//RegisterDynamicBinding("redm_collective", "dani", "Esto es una prueba", "P");
+	
+	// Hook functions to retrieve the name from input id
+	{
+		std::initializer_list<PatternPair> patterns = {
+			{ "E8 ? ? ? ? 48 8B D0 B9 ? ? ? ? 48 8B F8 E8 ? ? ? ? 4C 8B C7 8B D0 B9 ? ? ? ? 8B D8 E8 ? ? ? ? 48 8B 4D", 0x0 },
+			{ "48 8D 15 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 48 8D 55 ? 33 C9 E8 ? ? ? ? 39 43", -0x18 },
+			{ "E8 ? ? ? ? 4C 8D 0D ? ? ? ? 4C 8B C0 48 8D 15 ? ? ? ? 48 8D 4D", 0x0 },
+			{ "E8 ? ? ? ? 33 D2 48 8B C8 E8 ? ? ? ? 48 8B 4F", 0x0 },
+			{ "E8 ? ? ? ? 33 D2 48 89 45 ? 48 85 C0 74 ? 45 84 E4", 0x0 },
+			{ "E8 ? ? ? ? 48 8B D0 B9 ? ? ? ? 48 8B F8 E8 ? ? ? ? 4C 8B C7 8B D0 B9 ? ? ? ? 8B D8 E8 ? ? ? ? 48 8D 54 24 ? 89 5C 24 ? 49 8B CF", 0x0 }
+		};
+
+		for (const auto& patternPair : patterns)
+		{
+			hook::call(hook::get_pattern(patternPair.pattern, patternPair.offset), GetNameFromInput);
+		}
+		
+		g_origGetActionName = hook::trampoline(hook::get_pattern("48 63 D1 48 8D 0D ? ? ? ? E9"), GetActionName);
+		g_inputTypeData = hook::get_address<void*>(hook::get_pattern("48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8B D0 B9 ? ? ? ? 48 8B F8 E8 ? ? ? ? 4C 8B C7 8B D0 B9 ? ? ? ? 8B D8 E8 ? ? ? ? 48 8B 4D", 0x3));
+		g_origGetInputByName = hook::trampoline(hook::get_pattern("48 83 EC ? 48 8B D1 45 33 C9"), GetInputByName);
+	}
+
+	// Mapping categories
+	{
+		game::AddCustomText("PM_PANE_CFX", "RedM");
+		g_origGetMappingCategories = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B 7C 24 ? 45 8B F4")), GetMappingCategories);
+	}
+	
 	g_origGetCategoryInputs = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B 5D ? 41 8B F5")), GetCategoryInputs);
-	g_origGetActionName = hook::trampoline(hook::get_pattern("48 63 D1 48 8D 0D ? ? ? ? E9"), GetActionName);
-	g_origGetBindingForControl = hook::trampoline(hook::get_pattern("48 89 5C 24 ? 48 89 74 24 ? 48 89 7C 24 ? 41 56 48 83 EC ? 48 8D 99 ? ? ? ? 41 8B F0"), GetBindingForControl);
-	g_origGetInputByName = hook::trampoline(hook::get_pattern("48 83 EC ? 48 8B D1 45 33 C9"), GetInputByName);
-	g_origDoEnableInput = hook::trampoline(hook::get_pattern("0F B7 41 ? 3B D0 73 ? 8B C2 48 69 D0 ? ? ? ? 48 8B 41 ? 44 0F B7 84 02"), DoEnableInput);
-	g_origsub_142C38838 = hook::trampoline(hook::get_pattern("48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 48 89 78 ? 41 56 48 83 EC ? 48 8B F1 49 8B F8"), sub_142C38838);
-	
-	//g_origIsInputConflicting = hook::trampoline(hook::get_pattern("48 89 74 24 ? 48 89 7C 24 ? 4C 89 74 24 ? 4C 8B 09"), IsInputConflicting);
-	//g_origHandleInputConflicts = hook::trampoline(hook::get_pattern("48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 48 89 78 ? 41 54 41 56 41 57 48 83 EC ? 4C 8B 1D ? ? ? ? 40 32 ED"), HandleInputConflicts);
-	//g_origUpdateBindingState = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 83 C3 ? 48 FF C6 48 3B F7 75 ? 48 8B 5D")), UpdateBindingState);
-	//g_origFindDeviceForInput = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 44 8A 0D ? ? ? ? 48 8D 54 24")), FindDeviceForInput);
-	//g_origsub_140A3EF0C = hook::trampoline(hook::get_call(hook::get_pattern("E8 ? ? ? ? 48 8B 44 24 ? 48 85 C0 74 ? 48 8B 48 ? BA")), sub_140A3EF0C);
-
-	g_origNameFromValueUnsafe = hook::trampoline(hook::get_call(hook::get_pattern(
-		"E8 ? ? ? ? 33 D2 48 8B C8 E8 ? ? ? ? 48 8B 4F"
-	)), GetNameFromValueUnsafe);
-
-	g_inputTypeData = hook::get_address<void*>(hook::get_pattern("48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8B D0 B9 ? ? ? ? 48 8B F8 E8 ? ? ? ? 4C 8B C7 8B D0 B9 ? ? ? ? 8B D8 E8 ? ? ? ? 48 8B 4D", 0x3));
-	trace("g_inputTypeData: %p\n", (void*)g_inputTypeData);
-
-	g_mappingLists = hook::get_address<atArray<rage::MappingList>*>(hook::get_pattern("4C 8B 05 ? ? ? ? 49 C1 E1", 0x3));
-	trace("g_mappingLists: %p\n", (void*)g_mappingLists);
-
-	//hook::nop(hook::get_pattern("E8 ? ? ? ? 48 8B 4D ? 4D 8B C5"), 5); // HashString
 
 	// Allow duplicated
 	hook::nop(hook::get_pattern("E8 ? ? ? ? 48 8D 4D ? BA ? ? ? ? 48 2B CB"), 5);
-
 	hook::nop(hook::get_pattern("74 ? 41 8D 57 ? 44 89 7C 24"), 0x2);
 
 	// UpdateBindingState
@@ -308,8 +665,9 @@ static HookFunction hookFunction([]()
 				test(edi, 0x80000000);
 				jz("NotCustom");
 
-				movsxd(rcx, edi);
-				mov(rax, (uintptr_t)GetBindingName);
+				mov(rcx, 0);
+				movsxd(rdx, edi);
+				mov(rax, (uintptr_t)GetNameFromInput);
 				call(rax);
 				mov(r15, rax);
 
