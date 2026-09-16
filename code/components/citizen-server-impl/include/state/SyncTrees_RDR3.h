@@ -14,6 +14,14 @@
 
 namespace fx::sync
 {
+inline int ReadSignedValue(SyncParseState& state, int length)
+{
+	bool negative = state.buffer.ReadBit();
+	int magnitude = state.buffer.Read<int>(length - 1);
+
+	return (negative) ? ~magnitude : magnitude;
+}
+
 struct CVehicleCreationDataNode : GenericSerializeDataNode<CVehicleCreationDataNode>
 { 
 	uint32_t m_model;
@@ -717,7 +725,70 @@ struct CPlaneGameStateDataNode { };
 struct CPlaneControlDataNode { };
 struct CSubmarineGameStateDataNode { };
 struct CSubmarineControlDataNode { };
-struct CTrainGameStateDataNode { };
+struct CTrainGameStateDataNode
+{
+	CTrainGameStateDataNodeData data{};
+
+	bool hasConsist = false;
+	bool linkedCarriageOnSameTrack = false;
+	int unkToken149 = 0;
+	int unkToken148 = 0;
+	int unkToken140 = 0;
+	int unkToken136 = 0;
+	int unkToken144 = 0;
+	float maxSpeed = 0.0f;
+	bool unkToken151 = false;
+	bool isHalted = false;
+	bool hasWhistleSequence = false;
+	uint32_t whistleSequence = 0;
+	bool unkEngineFlag = false;
+	bool hasJunctionAhead = false;
+	bool junctionSwitchState0 = false;
+	bool junctionSwitchState1 = false;
+
+	bool Parse(SyncParseState& state)
+	{
+		hasConsist = state.buffer.ReadBit();
+
+		data.trackId = ReadSignedValue(state, 6);
+		data.direction = state.buffer.ReadBit();
+		linkedCarriageOnSameTrack = state.buffer.ReadBit();
+
+		unkToken149 = ReadSignedValue(state, 6);
+		unkToken148 = ReadSignedValue(state, 6);
+		unkToken140 = ReadSignedValue(state, 6);
+		unkToken136 = ReadSignedValue(state, 6);
+		unkToken144 = ReadSignedValue(state, 6);
+
+		data.trainState = state.buffer.Read<int>(4);
+
+		data.cruiseSpeed = ReadSignedValue(state, 10) * 0.1f;
+		maxSpeed = ReadSignedValue(state, 10) * 0.1f;
+
+		unkToken151 = state.buffer.ReadBit();
+		isHalted = state.buffer.ReadBit();
+
+		hasWhistleSequence = state.buffer.ReadBit();
+
+		if (hasWhistleSequence)
+		{
+			whistleSequence = state.buffer.Read<uint32_t>(32);
+		}
+
+		unkEngineFlag = state.buffer.ReadBit();
+
+		hasJunctionAhead = state.buffer.ReadBit();
+
+		if (hasJunctionAhead)
+		{
+			junctionSwitchState0 = state.buffer.ReadBit();
+			junctionSwitchState1 = state.buffer.ReadBit();
+		}
+
+		return true;
+	}
+};
+
 struct CPlayerCreationDataNode { };
 struct CPlayerGameStateDataNode { };
 
@@ -1152,7 +1223,20 @@ struct CDraftVehHorseHealthDataNode { };
 struct CDraftVehHorseGameStateDataNode { };
 struct CDraftVehGameStateDataNode { };
 struct CTrainControlDataNode { };
-struct CTrainGameStateUncommonDataNode { };
+struct CTrainGameStateUncommonDataNode
+{
+	int trainConfigIndex = -1;
+	int carriageIndex = -1;
+
+	bool Parse(SyncParseState& state)
+	{
+		trainConfigIndex = ReadSignedValue(state, 8);
+		carriageIndex = ReadSignedValue(state, 8);
+
+		return true;
+	}
+};
+
 struct CVehicleCommonDataNode { };
 struct CDoorDamageDataNode { };
 struct CPedSectorPosNavMeshDataNode { };
@@ -1385,7 +1469,21 @@ struct SyncTree : public SyncTreeBaseImpl<TNode, true>
 
 	virtual CTrainGameStateDataNodeData* GetTrainState() override
 	{
-		return nullptr;
+		auto [hasNode, node] = this->template GetData<CTrainGameStateDataNode>();
+
+		if (!hasNode)
+		{
+			return nullptr;
+		}
+
+		if (auto [hasUncommonNode, uncommonNode] = this->template GetData<CTrainGameStateUncommonDataNode>(); hasUncommonNode && node->data.carriageIndex != uncommonNode->carriageIndex)
+		{
+			node->data.trainConfigIndex = uncommonNode->trainConfigIndex;
+			node->data.carriageIndex = uncommonNode->carriageIndex;
+			node->data.isEngine = uncommonNode->carriageIndex == 0;
+		}
+
+		return &node->data;
 	}
 
 	virtual CPlayerGameStateNodeData* GetPlayerGameState() override
