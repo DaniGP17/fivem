@@ -26,52 +26,54 @@ struct ScriptImRequest
 	char m_pad[8];
 };
 
+struct ScriptImPendingRequests
+{
+	ScriptImRequest* m_offset;
+	uint16_t m_count;
+	uint16_t m_size;
+};
+
 static constexpr int kMaxScriptImRequests = 1024;
+static constexpr uint32_t kScriptImSharedDataBlockType = 20;
 static std::vector<ScriptImRequest> g_scriptImRequests{};
 
-static ScriptImRequest** g_scriptImBuffer;
-static uint16_t* g_scriptImEntriesCount;
+static ScriptImPendingRequests* g_gameScriptImRequests;
+static ScriptImRequest** g_scriptImFrameRequests;
+static uint32_t* g_scriptImFrameCount;
+static uintptr_t (*g_addSharedDataBlock)(uint32_t size, uint32_t type, bool multiBuffered);
 
-static hook::cdecl_stub<void()> initScriptImBuffer([]()
+static void AddScriptImRequest(const ScriptImRequest& request)
 {
-	return hook::get_pattern("48 89 5C 24 ? 57 48 83 EC 20 0F B7 05 ? ? ? ? 33 FF");
-});
-
-static void (*g_origRenderScriptIm)();
-static void RenderScriptIm()
-{
-	// The game never uses this buffer itself, but it *may* be changed in the future updates.
-	// This code isn't ready for such a scenario, so might potentially require tweaks.
-	// Like if something allocate script im buffer before us, we would need to resize it
-	// and not just rewrite everything without custom stuff.
-
-	if (g_scriptImRequests.empty())
+	if (g_scriptImRequests.size() >= kMaxScriptImRequests)
 	{
 		return;
 	}
 
-	*g_scriptImEntriesCount = g_scriptImRequests.size();
+	g_scriptImRequests.push_back(request);
+}
 
-	// If the buffer isn't allocated, let's do it.
-	if (!*g_scriptImBuffer)
-	{
-		initScriptImBuffer();
-	}
+static void SnapshotScriptImRequests()
+{
+	const uint32_t gameCount = g_gameScriptImRequests->m_count;
+	const uint32_t count = gameCount + static_cast<uint32_t>(g_scriptImRequests.size());
 
-	// Failed to allocate? Bail out.
-	if (!*g_scriptImBuffer)
+	*g_scriptImFrameCount = count;
+
+	if (count == 0)
 	{
-		*g_scriptImEntriesCount = 0;
+		*g_scriptImFrameRequests = nullptr;
 		return;
 	}
 
-	// Move stuff from our temp vector to the in-game buffer.
-	std::move(g_scriptImRequests.begin(), g_scriptImRequests.end(), *g_scriptImBuffer);
+	auto frameRequests = reinterpret_cast<ScriptImRequest*>(g_addSharedDataBlock(count * sizeof(ScriptImRequest), kScriptImSharedDataBlockType, false));
 
-	g_origRenderScriptIm();
+	std::copy_n(g_gameScriptImRequests->m_offset, gameCount, frameRequests);
+	std::copy(g_scriptImRequests.begin(), g_scriptImRequests.end(), frameRequests + gameCount);
 
+	*g_scriptImFrameRequests = frameRequests;
+
+	g_gameScriptImRequests->m_count = 0;
 	g_scriptImRequests.clear();
-	*g_scriptImEntriesCount = 0;
 }
 
 struct DrawOriginData
@@ -137,15 +139,14 @@ static HookFunction hookFunction([]()
 	}
 
 	{
-		auto location = hook::get_pattern<char>("48 89 05 ? ? ? ? E8 ? ? ? ? 66 89 3D");
+		auto location = hook::get_pattern<char>("48 89 5C 24 ? 57 48 83 EC 20 0F B7 05 ? ? ? ? 33 FF");
 
-		g_scriptImBuffer = hook::get_address<ScriptImRequest**>(location + 3);
-		g_scriptImEntriesCount = hook::get_address<uint16_t*>(location + 15);
-	}
+		g_scriptImFrameCount = hook::get_address<uint32_t*>(location + 0x15);
+		hook::set_call(&g_addSharedDataBlock, location + 0x2A);
+		g_gameScriptImRequests = hook::get_address<ScriptImPendingRequests*>(location + 0x32);
+		g_scriptImFrameRequests = hook::get_address<ScriptImRequest**>(location + 0x3F);
 
-	{
-		auto location = hook::get_pattern("33 C9 E8 ? ? ? ? E8 ? ? ? ? 33 C9 E8 ? ? ? ? 0F", -0x28);
-		g_origRenderScriptIm = hook::trampoline(location, RenderScriptIm);
+		hook::jump(location, SnapshotScriptImRequests);
 	}
 
 	{
@@ -186,11 +187,6 @@ static HookFunction hookFunction([]()
 
 	fx::ScriptEngine::RegisterNativeHandler("DRAW_LINE", [](fx::ScriptContext& context)
 	{
-		if (g_scriptImRequests.size() >= kMaxScriptImRequests)
-		{
-			return;
-		}
-
 		auto fromX = context.GetArgument<float>(0);
 		auto fromY = context.GetArgument<float>(1);
 		auto fromZ = context.GetArgument<float>(2);
@@ -210,16 +206,11 @@ static HookFunction hookFunction([]()
 		req.m_second = { toX, toY, toZ };
 		req.m_color = CRGBA(red, green, blue, alpha).AsABGR();
 
-		g_scriptImRequests.push_back(req);
+		AddScriptImRequest(req);
 	});
 
 	fx::ScriptEngine::RegisterNativeHandler("DRAW_POLY", [](fx::ScriptContext& context)
 	{
-		if (g_scriptImRequests.size() >= kMaxScriptImRequests)
-		{
-			return;
-		}
-
 		auto firstX = context.GetArgument<float>(0);
 		auto firstY = context.GetArgument<float>(1);
 		auto firstZ = context.GetArgument<float>(2);
@@ -244,16 +235,11 @@ static HookFunction hookFunction([]()
 		req.m_third = { thirdX, thirdY, thirdZ };
 		req.m_color = CRGBA(red, green, blue, alpha).AsABGR();
 
-		g_scriptImRequests.push_back(req);
+		AddScriptImRequest(req);
 	});
 
 	fx::ScriptEngine::RegisterNativeHandler("DRAW_BOX", [](fx::ScriptContext& context)
 	{
-		if (g_scriptImRequests.size() >= kMaxScriptImRequests)
-		{
-			return;
-		}
-
 		auto fromX = context.GetArgument<float>(0);
 		auto fromY = context.GetArgument<float>(1);
 		auto fromZ = context.GetArgument<float>(2);
@@ -273,22 +259,17 @@ static HookFunction hookFunction([]()
 		req.m_second = { toX, toY, toZ };
 		req.m_color = CRGBA(red, green, blue, alpha).AsABGR();
 
-		g_scriptImRequests.push_back(req);
+		AddScriptImRequest(req);
 	});
 
 	fx::ScriptEngine::RegisterNativeHandler("SET_BACKFACECULLING", [](fx::ScriptContext& context)
 	{
-		if (g_scriptImRequests.size() >= kMaxScriptImRequests)
-		{
-			return;
-		}
-
 		auto flag = context.GetArgument<bool>(0);
 
 		ScriptImRequest req;
 		req.m_type = flag ? SCRIPT_IM_BACKFACE_CULLING_ON : SCRIPT_IM_BACKFACE_CULLING_OFF;
 
-		g_scriptImRequests.push_back(req);
+		AddScriptImRequest(req);
 	});
 
 	fx::ScriptEngine::RegisterNativeHandler("DISABLE_WORLDHORIZON_RENDERING", [](fx::ScriptContext& context)
